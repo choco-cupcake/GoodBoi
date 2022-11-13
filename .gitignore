@@ -1,0 +1,6 @@
+.env
+package-lock.json
+.vscode
+helpers/
+node_modules/
+trash/

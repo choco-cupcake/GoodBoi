@@ -2,6 +2,33 @@ const Database = require('./DB');
 const Utils = require('./Utils');
 
 
+async function updateBalance(conn, chain, contractAddress, ERC20USDValue, ERC20Holdings, eth_balance){
+  let query = "UPDATE balances SET ERC20Holdings = ?, usdValue = ?, ethBalance_bp = ?, lastUpdate = NOW() WHERE address = ? AND chain = ?"
+  try{
+    let [data, fields] = await conn.query(query, [ERC20Holdings, ERC20USDValue, eth_balance, contractAddress, chain]);
+    if(!data.affectedRows){
+      Utils.printQueryError(query, [ERC20Holdings, ERC20USDValue, eth_balance, contractAddress, chain], "Error updating balance - row not found")
+      return false
+    }
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, [ERC20Holdings, ERC20USDValue, eth_balance, contractAddress, chain], "Error updating balance - " + e.message)
+    return false
+  }
+}
+
+async function getAddressesOldBalance(conn, chain){
+  let query = "SELECT ID, address FROM balances WHERE chain=? AND lastUpdate < NOW() - INTERVAL 2 DAY LIMIT 200"
+  try{
+    let [data, fields] = await conn.query(query, chain);
+    return data
+  }
+  catch(e){
+    Utils.printQueryError(query, params, e.message)
+    return []
+  }
+}
 
 async function getBatchToAnalyze(conn, len){
   let query = "SELECT sf.* FROM contract AS c INNER JOIN sourcefile AS sf ON c.ID=sf.contract WHERE c.analyzed_std=0 AND c.analyzed_error=0 LIMIT " + (len * 5) // on avg 5 files per contract
@@ -101,6 +128,13 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
     }
     console.log("ERROR - query error inserting contract", contractID.error)
     return
+  } 
+
+  // create empty balance record
+  let balanceQuery = "INSERT INTO balances (chain, address) VALUES (?, ?)"
+  let balanceID = await performInsertQuery(conn, balanceQuery, [chain, contractAddress])
+  if(!balanceID || balanceID.error){
+      console.log("WARNING - could not create empty balance for address " + contractAddress)
   } 
 
   // update source files
@@ -221,4 +255,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

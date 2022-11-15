@@ -4,3 +4,4 @@ package-lock.json
 helpers/
 node_modules/
 trash/
+tmp_analysis/

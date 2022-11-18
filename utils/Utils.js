@@ -1,7 +1,8 @@
 class Utils {
 
   static chains = {
-      ETH_MAINNET: "ETH_MAINNET"
+      ETH_MAINNET: "ETH_MAINNET",
+      BSC_MAINNET: "BSC_MAINNET"
     }
 
   static printQueryError(query, params, error = null){
@@ -27,6 +28,8 @@ class Utils {
     }
     return result;
   }
+
+  
 }
 
 module.exports = Utils;

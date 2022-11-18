@@ -13,15 +13,15 @@ const priceAggregatorAddress = "0xb1f8e55c7f64d203c1400b9d8555d050f94adf39"
 const ERC20_of_interest = require("../data/ERC20_of_interest");
 const chain = Utils.chains.ETH_MAINNET
 
-refreshBalances()
+//refreshBalances()
 
-async function refreshBalances(){
+async function refreshBalances(chain, daysOld){ 
   dbConn = await mysql.getDBConnection()
   await getAllQuotes() // get fresh prices for all tokens of interest
-  let addresses = await mysql.getAddressesOldBalance(dbConn, chain) // Todo query - insert empty balance record at contract creation
+  let addresses = await mysql.getAddressesOldBalance(dbConn, chain, daysOld) 
   while(true){
     if(addresses.length < 5){
-      addresses = await mysql.getAddressesOldBalance(dbConn, chain) // todo format as function
+      addresses = await mysql.getAddressesOldBalance(dbConn, chain, daysOld)
       if(!addresses.length){
         console.log("All balances have been updated")
         return
@@ -100,3 +100,5 @@ async function moralisGetPriceUSD(address){
   return await axios.request(options)
   } catch(e) {return null}
 }
+
+module.exports = {refreshBalances}

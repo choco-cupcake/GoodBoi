@@ -5,23 +5,21 @@ const Utils = require('../utils/Utils');
 let addressBuffer = []
 let mysqlConn
 
-getAllSources()
-
-async function getAllSources(){
+async function getAllSources(chain){ // TODO implement query
 	if(!mysqlConn){
 		mysqlConn = await mysql.getDBConnection()
 	}
 	if(!addressBuffer.length){
 		await Utils.sleep(1000)
-		addressBuffer = await mysql.getAddressBatchFromPool(mysqlConn, Utils.chains.ETH_MAINNET) 
+		addressBuffer = await mysql.getAddressBatchFromPool(mysqlConn, chain) 
 		if(!addressBuffer.length){
 			console.log("Addresspool is empty. Leaving")
 			return
 		}
 	}
-	await crawlSourceCode(Utils.chains.ETH_MAINNET, addressBuffer.pop().address)
+	await crawlSourceCode(chain, addressBuffer.pop().address)
 	await Utils.sleep(200) // api rate limit
-	await getAllSources()
+	await getAllSources(chain)
 }
 
 async function crawlSourceCode(chain, address){
@@ -47,20 +45,25 @@ async function crawlSourceCode(chain, address){
 
 function contractsToObject(source){
 	let src, filesList = []
+  // around 99% of the sources are wrapped in {{}}, we need only a pair of {}
+  if(source.substring(0,2) == "{{"){
+    source = source.substring(1,source.length-1)
+  }
 	try{
-		src = JSON.parse(source.substring(1,source.length-1)) // parse JSON containing multiple files
+		src = JSON.parse(source) // parse JSON containing multiple files
 	}
 	catch(e){
 		if(source && source.length)
 			return [{filename: 'single.sol', source: source}]
 		return "ERROR_ZERO_LENGTH"
 	}
-	if(src.language != 'Solidity'){
+	if(src.language && src.language != 'Solidity'){
 		return ""
 	}
-	for(let k of Object.keys(src.sources)){
+  let root = src.sources ? src.sources : src // 99% of the sources are wrapped in .sources
+	for(let k of Object.keys(root)){
 		let fileName = k.split("/").at(-1)
-		let fileSource = cleanImports(src.sources[k].content)
+		let fileSource = cleanImports(root[k].content)
 		filesList.push({filename: fileName, source: fileSource})
 	}
 	return filesList
@@ -105,3 +108,6 @@ async function getRawSource(address){
 	}
 	
 }
+
+
+module.exports = {getAllSources}

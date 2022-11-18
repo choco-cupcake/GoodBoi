@@ -30,8 +30,10 @@ function inspectSlitherOutput(results){
       console.log("REQUIRED EXPLICIT OVERRIDE")
     else if(results.err.includes("Error: Source file requires different compiler version "))
       console.log("DIFFERENT COMPILER VERSIONS")
-    else
-      console.log("OTHER ERROR")
+    else{
+      console.log("============== OTHER ERROR")
+      //console.log("results.err: ", results.err)
+    }
     return {error: "SLITHER_EMPTY_OUTPUT"}
   } 
   let summary = results.out.substring("Summary\r\n".length)
@@ -48,6 +50,11 @@ function inspectSlitherOutput(results){
     else{
       findings[name] = count
     }
+  }
+  // add count = 0 for detectors that found no issues
+  for(let d of workerData.detectors){
+    if(!findings[d])
+      findings[d] = 0
   }
   return {report: summary, findings: findings}
 }

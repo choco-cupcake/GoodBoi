@@ -18,30 +18,45 @@ async function updateBalance(conn, chain, contractAddress, ERC20USDValue, ERC20H
   }
 }
 
-async function getAddressesOldBalance(conn, chain){
-  let query = "SELECT ID, address FROM balances WHERE chain=? AND lastUpdate < NOW() - INTERVAL 2 DAY LIMIT 200"
+async function getAddressesOldBalance(conn, chain, daysOld){
+  let query = "SELECT ID, address FROM balances WHERE chain=? AND lastUpdate < NOW() - INTERVAL ? DAY LIMIT 200"
   try{
-    let [data, fields] = await conn.query(query, chain);
+    let [data, fields] = await conn.query(query, [chain, daysOld]);
     return data
   }
   catch(e){
-    Utils.printQueryError(query, params, e.message)
+    Utils.printQueryError(query, chain, e.message)
     return []
   }
 }
 
-async function getBatchToAnalyze(conn, len){
-  let query = "SELECT sf.* FROM contract AS c INNER JOIN sourcefile AS sf ON c.ID=sf.contract WHERE c.analyzed_std=0 AND c.analyzed_error=0 LIMIT " + (len * 5) // on avg 5 files per contract
+async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
+  let endOfResults = false
+  let limit = (len * 5) // 5 files per contract on avg
+  let detSub = buildDetectorsFindSubquery(detectors)
+  let query = ''.concat("SELECT sf.* FROM contract AS c ",  
+            "INNER JOIN sourcefile AS sf ON c.ID=sf.contract ",
+            "INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address ",
+            "LEFT JOIN analysis AS an ON an.contract = c.ID ",
+            "WHERE c.chain = ? AND b.usdValue >= ? AND c.compiler_error=0 ", // AND c.analyzed_std=0 
+            detSub,  // keeps only contracts not yet analyzed for these detectors (NULL if contract has not been analyzed yet for any detector)
+            "LIMIT ", limit)
+  console.log(query)
   try{
-    let [data, fields] = await conn.query(query);
+    let [data, fields] = await conn.query(query, [chain, minUsdValue])
     if(!data.length){
-      console.log("ERROR - Can't get contracts to analyze - length = 0")
-      return data
+      console.log("WARNING - Can't get contracts to analyze - length = 0")
+      return {eor: true, data: []}
     }
-    let lastContract = data.at(-1).contract
-    data = data.filter(e => e.contract != lastContract) // last contract may lack some files
+    if(data.length < limit){
+      endOfResults = true
+    }
+    else{
+      let lastContract = data.at(-1).contract
+      data = data.filter(e => e.contract != lastContract) // last contract may lack some files
+    }
     let contracts = []
-    for(let d of data)
+    for(let d of data) // group files by contract
       if(!contracts.includes(d.contract)) 
         contracts.push(d.contract)
     let returnData = []
@@ -49,31 +64,39 @@ async function getBatchToAnalyze(conn, len){
       let files = data.filter(e => e.contract == c)
       returnData.push({ID: c, files: files})
     }
-    return returnData
+    return {eor: endOfResults, data: returnData}
   }
   catch(e){
     console.log("ERROR - Can't get contracts to analyze", e.message)
+    process.exit()
   }
 }
 
+function buildDetectorsFindSubquery(detectors){
+  let ret = []
+  for(let d of detectors)
+    ret.push("(an.`" + d + "` IS NULL OR an.`" + d + "`=-1)")
+  return " AND (".concat(ret.join(" OR "), ") ")
+}
+
 async function markContractAsAnalyzed(conn, contractID){
-  let query = "UPDATE contract set `analyzed_std` = 1, `analyzed_error` = 0 WHERE ID = ?"
+  let query = "UPDATE contract set `analyzed_std` = 1, `compiler_error` = 0 WHERE ID = ?"
   try{
     let [data, fields] = await conn.query(query, contractID);
     if(!data.affectedRows){
-      Utils.printQueryError(query, contractID, "Error setting contract as analyzed_error")
+      Utils.printQueryError(query, contractID, "Error setting contract as compiler_error")
       return false
     }
     return true
   }
   catch(e){
-    Utils.printQueryError(query, contractID, "Error setting contract as analyzed_error - " + e.message)
+    Utils.printQueryError(query, contractID, "Error setting contract as compiler_error - " + e.message)
     return false
   }
 }
 
 async function markContractAsErrorAnalysis(conn, contractID){
-  let query = "UPDATE contract set `analyzed_error` = 1 WHERE ID = ?"
+  let query = "UPDATE contract set `compiler_error` = 1 WHERE ID = ?"
   try{
     let [data, fields] = await conn.query(query, contractID);
     if(!data.affectedRows){
@@ -88,29 +111,51 @@ async function markContractAsErrorAnalysis(conn, contractID){
   }
 }
 
+
 async function insertFindingsToDB(conn, contractID, findings){ 
-  let query = Object.keys(findings.findings).length ?
-    "INSERT INTO analysis (contract,report,`" + Object.keys(findings.findings).join("`,`") + "`) VALUES (" + [contractID, "?", ...Object.values(findings.findings)].join(",") + ")"
-    :
-    "INSERT INTO analysis (contract) VALUES (" + contractID + ")"
+  // try to update the existing record, insert if update fails 
+  let query = "UPDATE analysis SET " + buildFindingsUpdateSubquery(findings.findings) + " WHERE contract = ?"
+  try{
+    let [data, fields] = await conn.query(query, [contractID]);
+    if(!data.affectedRows){ // contract not yet analyzed by any detector
+      return _insertFindingsToDB(conn, contractID, findings) // insert new record
+    }
+    console.log(query)
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, [contractID, findings.findings], "Error updating analysis record - " + e.message)
+    return false
+  }
+}
+
+function buildFindingsUpdateSubquery(findings){
+  let ret = []
+  for(let k of Object.keys(findings))
+    ret.push("`" + k + "` = " + findings[k])
+  return ret.join(", ")
+}
+
+async function _insertFindingsToDB(conn, contractID, findings){ 
+  let query = "INSERT INTO analysis (contract,report,`" + Object.keys(findings.findings).join("`,`") + "`) VALUES (" + [contractID, "?", ...Object.values(findings.findings)].join(",") + ")"
   console.log(query)
   try{
     let [data, fields] = await conn.query(query, findings.report);
     if(!data.affectedRows){
       Utils.printQueryError(query, [], "Error pushing analysis")
-      return {data: null}
+      return false
     }
     if(!data.insertId){
       Utils.printQueryError(query, [], "Error pushing analysis - insertID is null")
-      return {data: null}
+      return false
     }
-    await markContractAsAnalyzed(conn, contractID)
+    await markContractAsAnalyzed(conn, contractID) // temporary to track analyzed contract, to be removed once everything is stable
     console.log("#" + contractID + " inserted to database") 
-    return data.insertId
+    return true
   }
   catch(e){
     Utils.printQueryError(query, [], "Error pushing analysis - " + e.message)
-    return {data: null}
+    return false
   }
 }
 
@@ -198,7 +243,7 @@ async function deleteAddressFromPool(conn, chain, address){
     return data.insertId
   }
   catch(e){
-    Utils.printQueryError(query, params, e.message)
+    Utils.printQueryError(query, [address, chain], e.message)
   }
 }
 
@@ -212,18 +257,18 @@ async function deleteContract(conn, chain, id){
     return data.insertId
   }
   catch(e){
-    Utils.printQueryError(query, params, e.message)
+    Utils.printQueryError(query, [id, chain], e.message)
   }
 }
 
 async function getAddressBatchFromPool(conn, chain){
-  let query = "SELECT address FROM addresspool WHERE chain = ? LIMIT 50"
+  let query = "SELECT address FROM addresspool WHERE chain = ? LIMIT 200"
   try{
     let [data, fields] = await conn.query(query, chain);
     return data
   }
   catch(e){
-    Utils.printQueryError(query, params, e.message)
+    Utils.printQueryError(query, chain, e.message)
     return []
   }
 }

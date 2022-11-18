@@ -9,7 +9,7 @@ let mongoClient
  * Imports to local database all the addresses in the cloud pool, then deletes from cloud pool the addresses imported last time
  */
 
-downloadCloudPool("ETH_MAINNET")
+
 
 async function downloadCloudPool(chain){
   mysqlConn = await mysql.getDBConnection() // setup databases
@@ -65,3 +65,5 @@ async function deleteMarkedUploaded(chain){
     {uploadedToLocal : true}
   )
 }
+
+module.exports = {downloadCloudPool}

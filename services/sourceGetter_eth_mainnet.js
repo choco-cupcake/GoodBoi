@@ -1,38 +1,92 @@
+require("dotenv").config()
 const axios = require("axios")
 const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');
 
 let addressBuffer = []
 let mysqlConn
+let refillInterval
+let crawlInterval
+let done = false
+let lastRequests = []
 
-async function getAllSources(chain){ // TODO implement query
-	if(!mysqlConn){
-		mysqlConn = await mysql.getDBConnection()
+main()
+
+async function main(){
+	console.log("loop started")
+	let start = Date.now()
+	await getAllSources("ETH_MAINNET")
+	let toWait = process.env.SOURCE_GETTER_RUN_INTERVAL_MINUTES * 60 * 1000 - (Date.now() - start) // 20min - elapsed
+	console.log("loop done")
+	if(toWait > 0){
+		await Utils.sleep(toWait)
 	}
+	main()
+}
+
+
+async function getAllSources(chain){ 
+	mysqlConn = await mysql.getDBConnection()
+	await checkAndFill(chain) 
+	refillInterval = setInterval(checkAndFill, 3000, chain)
+	crawlInterval = setInterval(getSource, 200, chain)
+	return new Promise((resolve, reject) => {
+		setInterval(() => {if(done) resolve()}, 1000)
+	})
+}
+
+async function getSource(chain){
 	if(!addressBuffer.length){
-		await Utils.sleep(1000)
+		console.log("Addresspool is empty. Leaving")
+		clearInterval(crawlInterval)
+		done = true
+		return
+	}
+	// check req rate
+	let dateNow = Date.now()
+	let reqLastSec = 0
+	for(let lr of lastRequests){
+		if(dateNow - lr < 1000)
+			reqLastSec++
+	}
+	if(reqLastSec == 5){
+		console.log("======= RATE LIMIT - abort")
+		return
+	}
+	// add request
+	if(lastRequests.length >= 5) 
+		lastRequests.pop()
+	lastRequests = [dateNow].concat(lastRequests)
+	await crawlSourceCode(chain, addressBuffer.pop().address)
+}
+
+async function checkAndFill(chain) {
+	if(addressBuffer.length < 50){
 		addressBuffer = await mysql.getAddressBatchFromPool(mysqlConn, chain) 
-		if(!addressBuffer.length){
-			console.log("Addresspool is empty. Leaving")
-			return
+		if(addressBuffer.length < 200){
+			clearInterval(refillInterval)
 		}
 	}
-	await crawlSourceCode(chain, addressBuffer.pop().address)
-	await Utils.sleep(200) // api rate limit
-	await getAllSources(chain)
 }
 
 async function crawlSourceCode(chain, address){
 	let contractInfo = await getRawSource(address)
 	if(!contractInfo){
 		console.log("ERROR Etherscan API")
-		await Utils.sleep(200)
+		return
+	}
+	if(contractInfo.ABI == "Contract source code not verified"){
+		await mysql.markAsUnverified(mysqlConn, chain, address)
+		console.log("unverified")
+		return
+	}
+	if(!contractInfo.SourceCode){
+		console.log("ERROR Etherscan API - Got zero length source code of " + address)
 		return
 	}
 	contractInfo.SourceCode = contractsToObject(contractInfo.SourceCode)
 	if(contractInfo.SourceCode == "ERROR_ZERO_LENGTH"){
 		console.log("ERROR Etherscan API - Got zero length source code of " + address)
-		await Utils.sleep(200)
 		return
 	}
 	let insertRet = await mysql.pushSourceFiles(mysqlConn, chain, contractInfo, address)
@@ -40,16 +94,15 @@ async function crawlSourceCode(chain, address){
 		console.log("OK " + address)
 	else
 		console.log("ERROR pushing to pool source code of " + address)
-	await Utils.sleep(200)
 }
 
 function contractsToObject(source){
 	let src, filesList = []
   // around 99% of the sources are wrapped in {{}}, we need only a pair of {}
-  if(source.substring(0,2) == "{{"){
-    source = source.substring(1,source.length-1)
-  }
 	try{
+		if(source.substring(0,2) == "{{"){
+			source = source.substring(1,source.length-1)
+		}
 		src = JSON.parse(source) // parse JSON containing multiple files
 	}
 	catch(e){
@@ -75,7 +128,7 @@ function cleanImports(source){
 	let breakChars = ["'", "\"", "\\", "/"]
 	let lines = source.split('\n')
 	for(let l of lines){
-		if(pattMatch(l, import_patt)){
+		if(Utils.pattMatch(l, import_patt)){
 			let p1 = l.lastIndexOf(".sol")
 			let fileName = ".sol"
 			for(let i=p1-1; i>0; i--){
@@ -92,9 +145,6 @@ function cleanImports(source){
 	return cleanedSource
 }
 
-function pattMatch(line, pattern){
-	return line.trim().substring(0, pattern.length) == pattern
-}
 
 async function getRawSource(address){
 	let url = "https://api.etherscan.io/api?module=contract&action=getsourcecode&address=" + address + "&apikey=" + process.env.ETHERSCAN_API
@@ -108,6 +158,3 @@ async function getRawSource(address){
 	}
 	
 }
-
-
-module.exports = {getAllSources}

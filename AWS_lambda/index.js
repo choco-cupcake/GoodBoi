@@ -1,3 +1,8 @@
+const mysql = require('./mysqlGateway')
+const Utils = require('./Utils')
+const chain = Utils.chains.ETH_MAINNET
+const timeout_XP = 5000
+
 exports.handler = async (event) => {
   let body = await launchParsing()
   const response = {
@@ -9,18 +14,16 @@ exports.handler = async (event) => {
 
 const launchParsing = () => {
   return new Promise((resolve, reject) => {
-    const { MongoClient, ServerApiVersion } = require('mongodb');
-    const chain = "ETH_MAINNET"
-    const dbName = process.env.mongo_db_name
     let browser, page
-    let timeout_XP = 5000
-    let mongoClient
-
+    let dbConn
+    
     crawlEtherscan()
 
     async function crawlEtherscan(){
-	
-      let lastAddress = await setupMongoDB(chain) // get the newest address we crawled this way - we'll stop when we find that addr
+      dbConn = await mysql.getDBConnection()
+      
+      let lastAddress = await mysql.getLastParsedAddress(dbConn, chain) // get the newest address we crawled this way - we'll stop when we find that addr
+      console.log("lastAddress: ", lastAddress)
       if(!lastAddress) 
         resolve("")
 
@@ -33,7 +36,7 @@ const launchParsing = () => {
       while(true){
         
         let ret = await parsePage(lastAddress)
-        console.log("Got " + ret.addresses.length + " new verified contract addresses")
+        console.log("Got " + ret.addresses.length + " new verified contract addressess")
     
         if(!ret.addresses.length)
           break 
@@ -41,12 +44,8 @@ const launchParsing = () => {
         if(!firstAddress)
           firstAddress = ret.addresses[0] // we will store this value on the db only if this crawling process doesn't fail
         
-        let insertRet = await mongoInsert({"addresses" : ret.addresses})// push addresses to db
-        console.log("INSERT")
-        console.log(insertRet)
+        await mysql.pushVerifiedAddresses(dbConn, chain, ret.addresses) // push addresses to db
 
-        console.log(JSON.stringify(ret.addresses))
-        console.log(ret.addresses)
         if(!ret.next || ret.addresses.length < 100) // last page or we only had to crawl a few in the first page
           break
     
@@ -55,7 +54,7 @@ const launchParsing = () => {
       }
     
       if(firstAddress)
-        updateLastParsed(firstAddress) // update last crawled address
+        await mysql.updateLastParsedAddress(dbConn, chain, firstAddress)// update last crawled address
     
       await sleep(100)
       console.log("EtherScraper leaving")
@@ -114,6 +113,7 @@ const launchParsing = () => {
       puppeteerExtra.use(pluginStealth());
 			let proxyUrl = "http://" + process.env.smartproxy_id + ":" + process.env.smartproxy_pwd + "@gate.smartproxy.com:7000"
 			let newProxyUrl = await proxyChain.anonymizeProxy(proxyUrl);
+			console.log("newProxyUrl:",newProxyUrl, typeof newProxyUrl)
 			let newargs = chromium.args.slice();
 			newargs.push('--proxy-server=' + newProxyUrl);
       browser = await puppeteerExtra
@@ -129,36 +129,6 @@ const launchParsing = () => {
       });
       await page.goto("https://etherscan.io/contractsVerified")
       console.log("Puppeteer boot done")
-    }
-
-    async function setupMongoDB(chain){
-      console.log("Starting DB setup");
-      let mongoUrl = 'mongodb+srv://' + process.env.mongouser + ':' + process.env.mongopassword + '@cluster0.jvgcc.mongodb.net'
-      console.log(mongoUrl)
-      mongoClient = new MongoClient(mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
-      await mongoClient.connect();
-      // get last parsed
-      let status = (await mongoClient.db(dbName).collection("status").find({"chain" : chain}).toArray());
-      if(!status.length || !status[0].last_parsed){
-        console.log("Error getting last_parsed from mongo. Aborting")
-        return null
-      }
-      let lastParsed = status[0].last_parsed;
-      console.log("Crawled last parsed: " + lastParsed)
-      return lastParsed
-    }
-
-    async function mongoInsert(obj){
-      return await mongoClient.db(dbName).collection(chain + "_address_pool").insertOne(obj);
-    }
-
-    async function updateLastParsed(addr){
-      var ret = await mongoClient.db(dbName).collection("status").updateOne(
-        { chain : chain },
-        {
-        $set: {last_parsed : addr}
-        }
-        );
     }
     
 

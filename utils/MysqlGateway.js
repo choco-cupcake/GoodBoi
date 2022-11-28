@@ -2,6 +2,51 @@ const Database = require('./DB');
 const Utils = require('./Utils');
 
 
+async function updateLastParsedBlock(conn, block){
+  let query = "UPDATE status set `lastParsedBlock_eth_mainnet` = ? WHERE ID = 1"
+  try{
+    let [data, fields] = await conn.query(query, block);
+    if(!data.affectedRows){
+      Utils.printQueryError(query, block, "Error setting lastParsedBlock_eth_mainnet")
+      return false
+    }
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, block, "Error setting lastParsedBlock_eth_mainnet - " + e.message)
+    return false
+  }
+}
+
+async function getLastParsedBlock(conn){
+    let query = "SELECT lastParsedBlock_eth_mainnet FROM status WHERE ID=1;"
+    try{
+      let [data, fields] = await conn.query(query)
+      if(!data.length){
+        console.log("WARNING - Can't get last parsed block - length = 0")
+        return null
+      }
+      return data
+    }
+    catch(e){
+      console.log("ERROR - Can't get last parsed block", e.message)
+      return null
+    }
+}
+
+
+async function getHashFromDB(conn, h){
+  let query = "SELECT ID FROM sourcefile WHERE sourceHash = ?"
+  try{
+    let [data, fields] = await conn.query(query, h);
+    return data
+  }
+  catch(e){
+    Utils.printQueryError(query, h, e.message)
+    return []
+  }
+}
+
 async function updateBalance(conn, chain, contractAddress, ERC20USDValue, ERC20Holdings, eth_balance){
   let query = "UPDATE balances SET ERC20Holdings = ?, usdValue = ?, ethBalance_bp = ?, lastUpdate = NOW() WHERE address = ? AND chain = ?"
   try{
@@ -19,7 +64,7 @@ async function updateBalance(conn, chain, contractAddress, ERC20USDValue, ERC20H
 }
 
 async function getAddressesOldBalance(conn, chain, daysOld){
-  let query = "SELECT ID, address FROM balances WHERE chain=? AND lastUpdate < NOW() - INTERVAL ? DAY LIMIT 200"
+  let query = "SELECT ID, address FROM balances WHERE chain=? AND lastUpdate < NOW() - INTERVAL ? DAY LIMIT 3000"
   try{
     let [data, fields] = await conn.query(query, [chain, daysOld]);
     return data
@@ -31,11 +76,15 @@ async function getAddressesOldBalance(conn, chain, daysOld){
 }
 
 async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
+// analysis table analyzes sourcefile, not contract. results viewer will get related contracts
+
+
   let endOfResults = false
   let limit = (len * 5) // 5 files per contract on avg
   let detSub = buildDetectorsFindSubquery(detectors)
-  let query = ''.concat("SELECT sf.* FROM contract AS c ",  
-            "INNER JOIN sourcefile AS sf ON c.ID=sf.contract ",
+  let query = ''.concat("SELECT DISTINCT sf.* FROM contract AS c ",  
+            "INNER JOIN contract_sourcefile AS csf ON csf.contract = c.ID ",
+            "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
             "INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address ",
             "LEFT JOIN analysis AS an ON an.contract = c.ID ",
             "WHERE c.chain = ? AND b.usdValue >= ? AND c.compiler_error=0 ", // AND c.analyzed_std=0 
@@ -120,7 +169,6 @@ async function insertFindingsToDB(conn, contractID, findings){
     if(!data.affectedRows){ // contract not yet analyzed by any detector
       return _insertFindingsToDB(conn, contractID, findings) // insert new record
     }
-    console.log(query)
     return true
   }
   catch(e){
@@ -159,6 +207,23 @@ async function _insertFindingsToDB(conn, contractID, findings){
   }
 }
 
+async function markAsUnverified(conn, chain, address){
+  let parsedTable = 'parsedaddress_' + chain.toLowerCase()
+  let query = "UPDATE " + parsedTable + " SET verified = 0 WHERE address = ?"
+  try{
+    let [data, fields] = await conn.query(query, address);
+    if(!data.affectedRows){ 
+      Utils.printQueryError(query, address, "Error marking address as unverified")
+    }
+    await deleteAddressFromPool(conn, chain, address)
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, address, "Error marking address as unverified " + e.message)
+    return false
+  }
+}
+
 async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   // create contract record
   let contractQuery = "INSERT INTO contract (chain, address, contractName, compilerVersion, optimizationUsed, runs, constructorArguments, EVMVersion, library, licenseType, proxy, implementation, swarmSource)" +
@@ -182,15 +247,31 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
       console.log("WARNING - could not create empty balance for address " + contractAddress)
   } 
 
+
   // update source files
   let insertFileQuery 
   for(let f of contractObj.SourceCode){
-    insertFileQuery = "INSERT INTO sourcefile (contract, name, sourceText) VALUES (?, ?, ?)"
-    let sourcecodeID = (await performInsertQuery(conn, insertFileQuery, [contractID.data, f.filename, f.source])).data
-    if(!sourcecodeID){
-      console.log("ERROR inserting sourcefile for contract " + contractID.data)
-      await deleteContract(conn, chain, contractID.data) // delete inserted contract
-      return null
+    // compute codehash
+    let sourceHash = Utils.hash(f.source)
+    // check if sourcehash is already in table, add contract_sourcefile record [ + push sourcefile]
+    let previouslyFound = await getHashFromDB(conn, sourceHash)
+    let csfID
+    if(previouslyFound.length){ // same source already parsed, link new contract to old sourcefile
+      let prevID = previouslyFound[0].ID
+      csfID = await insertToContractSourcefile(conn, contractID.data, prevID)
+    }
+    else{ // new source, push it + add contract_sourcefile entry
+      insertFileQuery = "INSERT INTO sourcefile (sourceText, sourceHash) VALUES (?, ?)"
+      let sourcecodeID = (await performInsertQuery(conn, insertFileQuery, [f.source, sourceHash])).data
+      if(!sourcecodeID){
+        console.log("ERROR inserting sourcefile for contract " + contractID.data)
+        await deleteContract(conn, chain, contractID.data) // delete inserted contract
+        return null
+      }
+      csfID = await insertToContractSourcefile(conn, f.filename, contractID.data, sourcecodeID)
+    }
+    if(!csfID){
+      console.log("ERROR - could not insert new record into contract_sourcefile")
     }
   }
 
@@ -198,6 +279,22 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   await deleteAddressFromPool(conn, chain, contractAddress)
 
   return contractID.data
+}
+
+
+async function insertToContractSourcefile(conn, filename, contract, sourcefileID){
+  let query = "INSERT INTO contract_sourcefile (contract,sourcefile,filename) VALUES (?,?,?)"
+  try{
+    let [data, fields] = await conn.query(query, [contract, sourcefileID, filename]);
+    if(!data.insertId){
+      Utils.printQueryError(query, [contract, sourcefileID, filename], "Error pushing analysis - " + e.message)
+    }
+    return data.insertId
+  }
+  catch(e){
+    Utils.printQueryError(query, [contract, sourcefileID, filename], "Error pushing analysis - " + e.message)
+    return false
+  }
 }
 
 async function pushAddressesToPool(conn, chain, addressesList){
@@ -218,7 +315,7 @@ async function pushAddressesToPool(conn, chain, addressesList){
       }
     }
   }
-  console.log(inserted + " of " + addressesList.length + " new addresses added to db")
+  console.log(inserted + " of " + addressesList.length + " new contracts added to db")
 }
 
 async function pushAddressToParsedTable(conn, chain, address){
@@ -300,4 +397,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

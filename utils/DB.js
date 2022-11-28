@@ -3,10 +3,10 @@ const bluebird = require('bluebird');
 require("dotenv").config()
 
 const dbConf = {
-    host: "localhost",
-    user: "root",
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
     password: process.env.MYSQL_PASS,
-    database: "bugjunkie",
+    database: "goodboi",
     Promise: bluebird
 };
 
@@ -25,7 +25,7 @@ class Database {
             return this.db;
         } catch (err) {
             console.log('Error in database connection');
-            console.log(err.errro || err);
+            console.log(err.message || err);
         }
 
     }

@@ -5,52 +5,91 @@ const axios = require("axios");
 const mysql = require('../utils/MysqlGateway');
 const Web3 = require("web3")
 const web3 = new Web3("wss://mainnet.infura.io/ws/v3/" + process.env.INFURA_API_KEY);
-const readline = require('readline');
-
-const priceAggregatorABI = '[{"constant":true,"inputs":[{"name":"user","type":"address"},{"name":"token","type":"address"}],"name":"tokenBalance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"users","type":"address[]"},{"name":"tokens","type":"address[]"}],"name":"balances","outputs":[{"name":"","type":"uint256[]"}],"payable":false,"stateMutability":"view","type":"function"},{"payable":true,"stateMutability":"payable","type":"fallback"}]'
-const priceAggregatorAddress = "0xb1f8e55c7f64d203c1400b9d8555d050f94adf39"
 
 const ERC20_of_interest = require("../data/ERC20_of_interest");
-const chain = Utils.chains.ETH_MAINNET
+const priceAggregatorABI = '[{"constant":true,"inputs":[{"name":"user","type":"address"},{"name":"token","type":"address"}],"name":"tokenBalance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"users","type":"address[]"},{"name":"tokens","type":"address[]"}],"name":"balances","outputs":[{"name":"","type":"uint256[]"}],"payable":false,"stateMutability":"view","type":"function"},{"payable":true,"stateMutability":"payable","type":"fallback"}]'
+const priceAggregatorAddress = "0xb1f8e55c7f64d203c1400b9d8555d050f94adf39"
+const aggrAddrPerTime = process.env.AGGREGATED_ADDRESS_SIZE
+const parallelCrawlers = process.env.PARALLEL_CRAWLERS
 
-//refreshBalances()
+let daysOld, chain, dbConn
+let addresses
+let addrCrawled = 0, cumulativeUsd = 0
+let today
 
-async function refreshBalances(chain, daysOld){ 
+main()
+
+async function main(){
+	let start = Date.now()
+  if(today != new Date().getDate()){ // refresh prices once per day
+    today = new Date().getDate()
+    await refreshAllBalances(Utils.chains.ETH_MAINNET, process.env.BALANCE_REFRESH_DAYS)
+  }
+	let toWait = process.env.BALANCE_GETTER_RUN_INTERVAL_HOURS * 60 * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
+	if(toWait > 0){
+		await Utils.sleep(toWait)
+	}
+	main()
+}
+
+async function refreshAllBalances(_chain, _daysOld){ 
+  daysOld = _daysOld
+  chain = _chain
   dbConn = await mysql.getDBConnection()
+  addresses = await mysql.getAddressesOldBalance(dbConn, chain, daysOld)
   await getAllQuotes() // get fresh prices for all tokens of interest
-  let addresses = await mysql.getAddressesOldBalance(dbConn, chain, daysOld) 
-  while(true){
-    if(addresses.length < 5){
-      addresses = await mysql.getAddressesOldBalance(dbConn, chain, daysOld)
+  console.log("Balances update started")
+	for(let i=0; i<parallelCrawlers; i++){
+    refreshBatch()
+	}
+  return new Promise((resolve, reject) =>{
+    let intervalCheck = setInterval(() => {
       if(!addresses.length){
-        console.log("All balances have been updated")
-        return
+        clearInterval(intervalCheck); 
+        resolve();
       }
+    }, 1000)
+  })
+}
+
+async function refreshBatch(){
+  let batch = []
+  let addrLen = Math.min(addresses.length, aggrAddrPerTime)
+  for(let i=0; i<addrLen; i++)
+    batch.push(addresses.pop()) // we get multiple tokens for multiple addresses in one call to save on api rate
+  let ERC20Holdings_raw = await getAggregatedHoldings(batch.map(e => e.address)) 
+  for(let k=0; k<batch.length; k++){ 
+    let eth_balance = new BigNumber(ERC20Holdings_raw[k].balances[0]).div(new BigNumber("1e14")).toFixed(0) // saving integers at db with 4 decimals of precision
+    let ERC20USDValue = new BigNumber(0)
+    let ERC20Holdings = {holdings: []}
+    for(let i=0; i< ERC20Holdings_raw[k].balances.length; i++){ 
+      if(ERC20Holdings_raw[k].balances[i] == 0)
+        continue
+      let toAdd = new BigNumber(ERC20Holdings_raw[k].balances[i])
+        .times(new BigNumber(ERC20_of_interest[i]['USD_price']))
+        .div(new BigNumber("1e" + ERC20_of_interest[i]['decimals']))
+      ERC20USDValue = ERC20USDValue.plus(toAdd)
+      if(i != 0) // do not add native eth to ERC20 tokens
+        ERC20Holdings.holdings.push({token: ERC20_of_interest[i].token, amount: ERC20Holdings_raw[k].balances[i]})
     }
-    let batch = []
-    let addrLen = Math.min(addresses.length, 5)
-    for(let i=0; i<addrLen; i++)
-      batch.push(addresses.pop()) // we get multiple tokens for multiple addresses in one call to save on api rate
-    let ERC20Holdings_raw = await getAggregatedHoldings(batch.map(e => e.address)) // check returned decimals!!! 
-    for(let k=0; k<batch.length; k++){ 
-      let eth_balance = new BigNumber(ERC20Holdings_raw[k].balances[0]).div(new BigNumber("1e14")).toFixed(0)
-      let ERC20USDValue = new BigNumber(0)
-      let ERC20Holdings = {holdings: []}
-      for(let i=0; i< ERC20Holdings_raw[k].balances.length; i++){ 
-        if(ERC20Holdings_raw[k].balances[i] == 0)
-          continue
-        let toAdd = new BigNumber(ERC20Holdings_raw[k].balances[i])
-          .times(new BigNumber(ERC20_of_interest[i]['USD_price']))
-          .div(new BigNumber("1e" + ERC20_of_interest[i]['decimals']))
-        ERC20USDValue = ERC20USDValue.plus(toAdd)
-        if(i != 0) // do not add native eth to ERC20 tokens
-          ERC20Holdings.holdings.push({token: ERC20_of_interest[i].token, amount: ERC20Holdings_raw[k].balances[i]})
-      }
-      let usdval = ERC20USDValue.toFixed(0)
-      await mysql.updateBalance(dbConn, chain, batch[k].address, usdval, JSON.stringify(ERC20Holdings), eth_balance)
-      console.log("Got balance for address " + batch[k].address + " usd: " + usdval)
+    let usdval = ERC20USDValue.toFixed(0)
+    await mysql.updateBalance(dbConn, chain, batch[k].address, usdval, JSON.stringify(ERC20Holdings), eth_balance)
+
+    addrCrawled++
+    cumulativeUsd += +usdval
+    if(addrCrawled % 500 == 0){
+      console.log("Updated balances for " + addrCrawled + " addresses. Cumulative USD: " + cumulativeUsd)
     }
   }
+  
+  if(addresses.length < aggrAddrPerTime){
+    addresses = await mysql.getAddressesOldBalance(dbConn, chain, daysOld)
+    if(!addresses.length){
+      console.log("Address list empty, crawler done")
+      return
+    }
+  }
+  refreshBatch()
 }
 
 async function getAggregatedHoldings(addresses){
@@ -100,5 +139,3 @@ async function moralisGetPriceUSD(address){
   return await axios.request(options)
   } catch(e) {return null}
 }
-
-module.exports = {refreshBalances}

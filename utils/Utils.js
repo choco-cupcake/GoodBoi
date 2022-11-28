@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 class Utils {
 
   static chains = {
@@ -29,6 +30,28 @@ class Utils {
     return result;
   }
 
+  static preprocessSource(source){
+    // removes licence, pragma, empty lines, single line comments
+    let lines = source.split("\n")
+    let ret = ''
+    for(let l of lines){
+      let lClean = l.trim()
+      if(!lClean.length) continue
+      if(this.pattMatch(lClean, "//")) continue
+      if(this.pattMatch(lClean, "pragma")) continue
+      ret = ret.concat(l , "\n")
+    }
+    return ret
+  }
+  
+  static hash(input){
+    let sha256Hasher = crypto.createHmac("sha256", "whosagoodboi");
+    return sha256Hasher.update(this.preprocessSource(input)).digest("hex")
+  }
+
+  static pattMatch(line, pattern){
+    return line.trim().substring(0, pattern.length) == pattern
+  }
   
 }
 

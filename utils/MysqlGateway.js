@@ -2,8 +2,9 @@ const Database = require('./DB');
 const Utils = require('./Utils');
 
 
-async function updateLastParsedBlock(conn, block){
-  let query = "UPDATE status set `lastParsedBlock_eth_mainnet` = ? WHERE ID = 1"
+async function updateLastParsedBlock(conn, block, chain){
+  let field = 'lastParsedBlock_' + chain.toLowerCase()
+  let query = "UPDATE status set " + field + " = ? WHERE ID = 1"
   try{
     let [data, fields] = await conn.query(query, block);
     if(!data.affectedRows){
@@ -18,15 +19,16 @@ async function updateLastParsedBlock(conn, block){
   }
 }
 
-async function getLastParsedBlock(conn){
-    let query = "SELECT lastParsedBlock_eth_mainnet FROM status WHERE ID=1;"
+async function getLastParsedBlock(conn, chain){
+  let field = 'lastParsedBlock_' + chain.toLowerCase()
+    let query = "SELECT " + field + " FROM status WHERE ID=1;"
     try{
       let [data, fields] = await conn.query(query)
       if(!data.length){
         console.log("WARNING - Can't get last parsed block - length = 0")
         return null
       }
-      return data
+      return data[0][field]
     }
     catch(e){
       console.log("ERROR - Can't get last parsed block", e.message)
@@ -63,10 +65,10 @@ async function updateBalance(conn, chain, contractAddress, ERC20USDValue, ERC20H
   }
 }
 
-async function getAddressesOldBalance(conn, chain, daysOld){
-  let query = "SELECT ID, address FROM balances WHERE chain=? AND lastUpdate < NOW() - INTERVAL ? DAY LIMIT 3000"
+async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
+  let query = "SELECT ID, address FROM balances WHERE chain=? AND lastUpdate < NOW() - INTERVAL ? DAY LIMIT ?"
   try{
-    let [data, fields] = await conn.query(query, [chain, daysOld]);
+    let [data, fields] = await conn.query(query, [chain, daysOld, +batchSize]);
     return data
   }
   catch(e){
@@ -258,7 +260,7 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
     let csfID
     if(previouslyFound.length){ // same source already parsed, link new contract to old sourcefile
       let prevID = previouslyFound[0].ID
-      csfID = await insertToContractSourcefile(conn, contractID.data, prevID)
+      csfID = await insertToContractSourcefile(conn, f.filename, contractID.data, prevID)
     }
     else{ // new source, push it + add contract_sourcefile entry
       insertFileQuery = "INSERT INTO sourcefile (sourceText, sourceHash) VALUES (?, ?)"

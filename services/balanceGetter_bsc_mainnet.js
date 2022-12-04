@@ -1,15 +1,17 @@
 require("dotenv").config()
 const BigNumber = require('bignumber.js');
 const Utils = require('../utils/Utils');
+let chain = Utils.chains.BSC_MAINNET
 const axios = require("axios");
 const mysql = require('../utils/MysqlGateway');
 const Web3 = require("web3")
-const web3 = new Web3("wss://mainnet.infura.io/ws/v3/" + process.env.INFURA_API_KEY);
-const chain = Utils.chains.ETH_MAINNET
+const rpcEndpoints = require("../data/rpcEndpoints")[chain]
+let web3 = [], web3Index = 0
 
 const ERC20_of_interest = require("../data/ERC20_of_interest")[chain];
 const priceAggregatorABI = '[{"constant":true,"inputs":[{"name":"user","type":"address"},{"name":"token","type":"address"}],"name":"tokenBalance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"users","type":"address[]"},{"name":"tokens","type":"address[]"}],"name":"balances","outputs":[{"name":"","type":"uint256[]"}],"payable":false,"stateMutability":"view","type":"function"},{"payable":true,"stateMutability":"payable","type":"fallback"}]'
-const priceAggregatorAddress = "0xb1f8e55c7f64d203c1400b9d8555d050f94adf39"
+const priceAggregatorAddress = "0xdb42bc817af649e66937c2683b7b422f8d86ef58"
+let aggregatorContract = [] 
 const aggrAddrPerTime = process.env.AGGREGATED_ADDRESS_SIZE
 const parallelCrawlers = process.env.PARALLEL_CRAWLERS
 const dbBatchSize = process.env.BALANCES_DB_BATCH_SIZE
@@ -24,6 +26,7 @@ main()
 
 async function main(){
   console.log("loop started")
+  bootstrapWeb3()
   dbConn = await mysql.getDBConnection()
   addresses = await mysql.getAddressesOldBalance(dbConn, chain, daysOld, dbBatchSize)
   let start = Date.now()
@@ -42,6 +45,13 @@ async function main(){
 		await Utils.sleep(toWait)
 	}
 	main()
+}
+
+function bootstrapWeb3(){
+  for(let endp of rpcEndpoints){
+    web3.push(new Web3(endp))
+    aggregatorContract.push(new web3[web3.length - 1].eth.Contract(JSON.parse(priceAggregatorABI), priceAggregatorAddress))
+  }
 }
 
 async function refreshAllBalances(){ 
@@ -97,9 +107,8 @@ async function refreshBatch(){
 }
 
 async function getAggregatedHoldings(addresses){
-  let aggregatorContract = new web3.eth.Contract(JSON.parse(priceAggregatorABI), priceAggregatorAddress)
   let tokens = ERC20_of_interest.map(e => e.address) // slice to skip native eth
-  let response = await aggregatorContract.methods.balances(addresses.map(e => web3.utils.toChecksumAddress(e)), tokens).call()
+  let response = await aggregatorContract[web3Index].methods.balances(addresses.map(e => web3[web3Index].utils.toChecksumAddress(e)), tokens).call()
   if(tokens.length * addresses.length != response.length){
     console.log("ERROR - balances response unexpected length")
     return null
@@ -117,7 +126,7 @@ async function getAggregatedHoldings(addresses){
 
 async function getAllQuotes(){
   console.log("Getting ERC20 quotes");
-  for(let i=1; i < ERC20_of_interest.length; i++){ // skip native ETH. kept in the same struct bc price aggregator contract accepts it
+  for(let i=0; i < ERC20_of_interest.length; i++){ // skip native ETH. kept in the same struct bc price aggregator contract accepts it
     let r = await moralisGetPriceUSD(ERC20_of_interest[i].address)
     if(!isNaN(r?.data?.usdPrice)){
       ERC20_of_interest[i]['USD_price'] = r.data.usdPrice
@@ -145,7 +154,7 @@ async function moralisGetPriceUSD(address){
   const options = {
     method: 'GET',
     url: 'https://deep-index.moralis.io/api/v2/erc20/' + address + '/price',
-    params: {chain: 'eth'},
+    params: {chain: "bsc"},
     headers: {'Accept-Encoding': 'application/json', 'X-API-Key': process.env.MORALIS_API_KEY}
   };
   try{
@@ -153,4 +162,10 @@ async function moralisGetPriceUSD(address){
   } catch(e) {
     return null
   }
+}
+
+function getContractRoundRobin(){ // round robin
+  let ret = aggregatorContract[web3Index]
+  web3Index = ++web3Index % web3.length
+  return ret
 }

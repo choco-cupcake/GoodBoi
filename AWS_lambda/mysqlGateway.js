@@ -11,13 +11,13 @@ async function updateLastParsedAddress(conn, chain, address){
   try{
     let [data, fields] = await conn.query(query, address);
     if(!data.affectedRows){
-      Utils.printQueryError(query, address, "Error setting lastParsedBlock_eth_mainnet")
+      Utils.printQueryError(query, address, "Error setting " + field)
       return false
     }
     return true
   }
   catch(e){
-    Utils.printQueryError(query, address, "Error setting lastParsedBlock_eth_mainnet - " + e.message)
+    Utils.printQueryError(query, address, "Error setting " + field + " - " + e.message)
     return false
   }
 }
@@ -39,26 +39,69 @@ async function getLastParsedAddress(conn, chain){
     }
 }
 
+async function pushAddressToPoolTable(conn, chain, addr){
+  let insertID = await pushAddressToParsedTable(conn, chain, addr)
+  if(insertID){ // it has been inserted in the table, it means it's new
+    let error = 1
+    while(error <= 5){
+      if(await _pushAddressToPoolTable(conn, chain, addr, 'addresspool')){
+        break
+      }
+      console.log("Error inserting addr " + addr + " to pool. Error #" + error)
+      error++
+      await Utils.sleep(200)
+    }
+  }
+}
+
+async function _pushAddressToPoolTable(conn, chain, address, table){
+  let insertQuery = "INSERT INTO " + table + " (address, chain) VALUES (?,?);"
+  let ret = (await performInsertQuery(conn, insertQuery, [address, chain]) ).data
+  return ret
+}
+
 async function pushVerifiedAddresses(conn, chain, addressesList){
   // double check it has not been inserted 
   let inserted = 0
+  let updated = 0
   for(let addr of addressesList){
-    if(!await pushAddressToPoolTable(conn, chain, addr, 'addresspool')){
-     console.log("Error inserting addr " + addr + " to pool")
-     continue
+    // look if in parsed_pool
+    // if so
+    //    if verified = 1 stop
+    //      if verified = 0 mark as verified and push to pool
+    // if not push to pool and mark as verified
+    let prevFound = getFromParsedPool(conn, chain, addr)
+    if(prevFound.length){
+      if(prevFound[0].verified){
+        continue
+      }
+      else{
+        setContractVerified(conn, chain, addr)
+        _pushAddressToPoolTable(conn, chain, addr, 'addresspool')
+        updated++
+      }
     }
-    let previouslyFound = await setContractVerified(conn, chain, addr)
-    if(previouslyFound){
-      console.log("Found previously inserted address, set to verified=1")
-    } else{
-      console.log("Found new address, set to verified=1")
-      pushAddressToParsedTable(conn, chain, addr)  
+    else{
+      pushAddressToPoolTable(conn, chain, addr)
+      inserted++
     }
   }
-  console.log(inserted + " of " + addressesList.length + " new addresses added to db")
+  console.log(inserted + " inserted, " + updated + " updated of " + addressesList.length + " new addresses")
   return inserted
 }
 
+async function getFromParsedPool(conn, chain, address){
+  let parsedTable = 'parsedaddress_' + chain.toLowerCase()
+  let query = "SELECT * FROM " + parsedTable + " WHERE address = ?"
+  try{
+    let [data, fields] = await conn.query(query, chain);
+    return data
+  }
+  catch(e){
+    Utils.printQueryError(query, chain, e.message)
+    return []
+  }
+}
 
 async function pushAddressToParsedTable(conn, chain, address){
     // try to update verified=1
@@ -66,12 +109,6 @@ async function pushAddressToParsedTable(conn, chain, address){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
   let insertQuery = "INSERT INTO " + parsedTable + " (address) VALUES (?);"
   return (await performInsertQuery(conn, insertQuery, [address], true, true)).data 
-}
-
-async function pushAddressToPoolTable(conn, chain, address, table){
-  let insertQuery = "INSERT INTO " + table + " (address, chain) VALUES (?,?);"
-  let ret = (await performInsertQuery(conn, insertQuery, [address, chain]) ).data
-  return ret
 }
 
 async function setContractVerified(conn, chain, address){

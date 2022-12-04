@@ -1,15 +1,18 @@
 require("dotenv").config()
 const Web3 = require("web3")
 const Utils = require('../utils/Utils')
+const chain = Utils.chains.BSC_MAINNET
 const mysql = require('../utils/MysqlGateway')
-
-let web3 = new Web3("wss://mainnet.infura.io/ws/v3/" + process.env.INFURA_API_KEY);
-const contrAggregatorAddress = "0xdb42bc817af649e66937c2683b7b422f8d86ef58"
+const axios = require("axios")
+const rpcEndpoints = require("../data/rpcEndpoints")[chain]
+let web3 = [], web3Index = 0
+const contrAggregatorAddress = "0x72A041660Bb132EdAAeF759CCF8585CFa14b65C5"
 const contrAggregatorABI = '[{"inputs":[{"internalType":"address[]","name":"targets","type":"address[]"}],"name":"areContracts","outputs":[{"internalType":"bool[]","name":"","type":"bool[]"}],"stateMutability":"view","type":"function"}]'
 let abi = JSON.parse(contrAggregatorABI)
 let dbConn 
-let aggregatorContract = new web3.eth.Contract(abi, contrAggregatorAddress)
+let aggregatorContract = [] 
 
+bootstrapWeb3()
 main()
 
 async function main(){
@@ -22,13 +25,20 @@ async function main(){
 	main()
 }
 
+function bootstrapWeb3(){
+  for(let endp of rpcEndpoints){
+    web3.push(new Web3(endp))
+    aggregatorContract.push(new web3[web3.length - 1].eth.Contract(abi, contrAggregatorAddress))
+  }
+}
+
 async function parseBlocks(){
   dbConn = await mysql.getDBConnection()
   // read last block scraped from DB
-  let lastBlockParsed = (await mysql.getLastParsedBlock(dbConn, Utils.chains.ETH_MAINNET))
+  let lastBlockParsed = (await mysql.getLastParsedBlock(dbConn, chain))
   console.log("lastBlockParsed:",lastBlockParsed)
   // get current block
-  let currentBlock = await web3.eth.getBlockNumber()
+  let currentBlock = await web3[web3Index].eth.getBlockNumber()
   console.log("currentBlock:",currentBlock)
 
   // loop parse blocks
@@ -43,18 +53,42 @@ async function parseBlocks(){
 async function parseBlock(blockIndex){
   try{
     console.log("Block #" + blockIndex)
-    let txObj = await web3.eth.getBlock(blockIndex, true)
+    let txObj = await getBlockObject(blockIndex)
     let toAddresses = txObj.transactions.map(e => e.to).filter(e => !!e)
-    let areContracts = await aggregatorContract.methods.areContracts(toAddresses).call()
+    toAddresses = [...new Set(toAddresses)];
+    let areContracts = await aggregatorContract[web3Index].methods.areContracts(toAddresses).call()
     let toContracts = toAddresses.filter((e,index) => areContracts[index])
-    await mysql.pushAddressesToPool(dbConn, Utils.chains.ETH_MAINNET, toContracts)
-    await mysql.updateLastParsedBlock(dbConn, blockIndex, Utils.chains.ETH_MAINNET)
+    await mysql.pushAddressesToPool(dbConn, chain, toContracts)
+    await mysql.updateLastParsedBlock(dbConn, blockIndex, chain)
   }
   catch(e){
     console.log("ERROR PARSING BLOCK #" + blockIndex, e.message)
-    web3 = new Web3("wss://mainnet.infura.io/ws/v3/" + process.env.INFURA_API_KEY);
-    aggregatorContract = new web3.eth.Contract(abi, contrAggregatorAddress)
     return false
   }
   return true
+}
+
+async function getBlockObject(blockNumber){
+let rpcEndp = getRpcEndpoint()
+let data = {
+	"jsonrpc":"2.0",
+	"method":"eth_getBlockByNumber",
+	"params":[
+		'0x' + blockNumber.toString(16), 
+		true
+	],
+	"id":1
+  }
+  const res = await axios.post(rpcEndp, data, {
+  headers: {
+    'content-type': 'application/json'
+  }
+});
+return res.data.result 
+}
+
+function getRpcEndpoint(){ // round robin
+  let ret = rpcEndpoints[web3Index]
+  web3Index = ++web3Index % web3.length
+  return ret
 }

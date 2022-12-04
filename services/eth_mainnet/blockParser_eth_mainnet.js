@@ -1,7 +1,7 @@
 require("dotenv").config()
 const Web3 = require("web3")
-const Utils = require('../utils/Utils')
-const mysql = require('../utils/MysqlGateway')
+const Utils = require('../../utils/Utils')
+const mysql = require('../../utils/MysqlGateway')
 
 let web3 = new Web3("wss://mainnet.infura.io/ws/v3/" + process.env.INFURA_API_KEY);
 const contrAggregatorAddress = "0xdb42bc817af649e66937c2683b7b422f8d86ef58"

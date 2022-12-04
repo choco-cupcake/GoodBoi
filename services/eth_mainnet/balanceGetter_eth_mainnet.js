@@ -1,13 +1,13 @@
 require("dotenv").config()
 const BigNumber = require('bignumber.js');
-const Utils = require('../utils/Utils');
+const Utils = require('../../utils/Utils');
 const axios = require("axios");
-const mysql = require('../utils/MysqlGateway');
+const mysql = require('../../utils/MysqlGateway');
 const Web3 = require("web3")
 const web3 = new Web3("wss://mainnet.infura.io/ws/v3/" + process.env.INFURA_API_KEY);
 const chain = Utils.chains.ETH_MAINNET
 
-const ERC20_of_interest = require("../data/ERC20_of_interest")[chain];
+const ERC20_of_interest = require("../../data/ERC20_of_interest")[chain];
 const priceAggregatorABI = '[{"constant":true,"inputs":[{"name":"user","type":"address"},{"name":"token","type":"address"}],"name":"tokenBalance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"users","type":"address[]"},{"name":"tokens","type":"address[]"}],"name":"balances","outputs":[{"name":"","type":"uint256[]"}],"payable":false,"stateMutability":"view","type":"function"},{"payable":true,"stateMutability":"payable","type":"fallback"}]'
 const priceAggregatorAddress = "0xb1f8e55c7f64d203c1400b9d8555d050f94adf39"
 const aggrAddrPerTime = process.env.AGGREGATED_ADDRESS_SIZE

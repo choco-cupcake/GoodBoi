@@ -1,14 +1,14 @@
 require("dotenv").config()
 const BigNumber = require('bignumber.js');
-const Utils = require('../utils/Utils');
+const Utils = require('../../utils/Utils');
 const chain = Utils.chains.POLYGON
 const axios = require("axios");
-const mysql = require('../utils/MysqlGateway');
+const mysql = require('../../utils/MysqlGateway');
 const Web3 = require("web3")
-const rpcEndpoints = require("../data/rpcEndpoints")[chain]
+const rpcEndpoints = require("../../data/rpcEndpoints")[chain]
 let web3 = [], web3Index = 0
 
-const ERC20_of_interest = require("../data/ERC20_of_interest")[chain];
+const ERC20_of_interest = require("../../data/ERC20_of_interest")[chain];
 const priceAggregatorABI = '[{"constant":true,"inputs":[{"name":"user","type":"address"},{"name":"token","type":"address"}],"name":"tokenBalance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"users","type":"address[]"},{"name":"tokens","type":"address[]"}],"name":"balances","outputs":[{"name":"","type":"uint256[]"}],"payable":false,"stateMutability":"view","type":"function"},{"payable":true,"stateMutability":"payable","type":"fallback"}]'
 const priceAggregatorAddress = "0xb249a7bf7b5cb4eec2352fd709cacadabcd4f819"
 let aggregatorContract = [] 
@@ -108,7 +108,7 @@ async function refreshBatch(){
 
 async function getAggregatedHoldings(addresses){
   let tokens = ERC20_of_interest.map(e => e.address) // slice to skip native eth
-  let response = await aggregatorContract[web3Index].methods.balances(addresses.map(e => web3[web3Index].utils.toChecksumAddress(e)), tokens).call()
+  let response = await getContractRoundRobin().methods.balances(addresses.map(e => web3[web3Index].utils.toChecksumAddress(e)), tokens).call()
   if(tokens.length * addresses.length != response.length){
     console.log("ERROR - balances response unexpected length")
     return null
@@ -166,4 +166,10 @@ async function moralisGetPriceUSD(address){
     console.log(e.message)
     return null
   }
+}
+
+function getContractRoundRobin(){ // round robin
+  let ret = aggregatorContract[web3Index]
+  web3Index = ++web3Index % web3.length
+  return ret
 }

@@ -1,7 +1,7 @@
 require("dotenv").config()
 const axios = require("axios")
-const mysql = require('../utils/MysqlGateway');
-const Utils = require('../utils/Utils');
+const mysql = require('../../utils/MysqlGateway');
+const Utils = require('../../utils/Utils');
 
 let addressBuffer = []
 let mysqlConn

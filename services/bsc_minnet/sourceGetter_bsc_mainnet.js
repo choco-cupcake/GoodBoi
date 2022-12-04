@@ -1,7 +1,7 @@
 require("dotenv").config()
 const axios = require("axios")
-const mysql = require('../utils/MysqlGateway');
-const Utils = require('../utils/Utils');
+const mysql = require('../../utils/MysqlGateway');
+const Utils = require('../../utils/Utils');
 
 let addressBuffer = []
 let mysqlConn
@@ -15,7 +15,7 @@ main()
 async function main(){
 	console.log("loop started")
 	let start = Date.now()
-	await getAllSources(Utils.chains.ETH_MAINNET)
+	await getAllSources(Utils.chains.BSC_MAINNET)
 	let toWait = process.env.SOURCE_GETTER_RUN_INTERVAL_MINUTES * 60 * 1000 - (Date.now() - start) // 20min - elapsed
 	console.log("loop done")
 	if(toWait > 0){
@@ -85,6 +85,8 @@ async function crawlSourceCode(chain, address){
 		return
 	}
 	contractInfo.SourceCode = contractsToObject(contractInfo.SourceCode)
+  
+
 	if(contractInfo.SourceCode == "ERROR_ZERO_LENGTH"){
 		console.log("ERROR Etherscan API - Got zero length source code of " + address)
 		return
@@ -107,7 +109,7 @@ function contractsToObject(source){
 	}
 	catch(e){
 		if(source && source.length)
-			return [{filename: 'single.sol', source: source}]
+			return [{filename: 'single.sol', source: cleanVerificationDateHeader(source)}]
 		return "ERROR_ZERO_LENGTH"
 	}
 	if(src.language && src.language != 'Solidity'){
@@ -116,10 +118,24 @@ function contractsToObject(source){
   let root = src.sources ? src.sources : src // 99% of the sources are wrapped in .sources
 	for(let k of Object.keys(root)){
 		let fileName = k.split("/").at(-1)
-		let fileSource = cleanImports(root[k].content)
+		let fileSource = cleanImports(cleanVerificationDateHeader(root[k].content))
 		filesList.push({filename: fileName, source: fileSource})
 	}
 	return filesList
+}
+
+function cleanVerificationDateHeader(source){
+  if(source.substring(0,70).includes("Submitted for verification at BscScan.com on ")){
+    let index = source.indexOf("*/")
+    if(index != -1){
+      let ret = source.substring(index + 2)
+      while(ret.substring(0,2) == "\r\n"){
+        ret = ret.substring(2) // remove leading newlines to hopefully make contracts match with eth ones
+      }
+      return ret
+    }
+  }
+  return source
 }
 
 function cleanImports(source){
@@ -147,7 +163,7 @@ function cleanImports(source){
 
 
 async function getRawSource(address){
-	let url = "https://api.etherscan.io/api?module=contract&action=getsourcecode&address=" + address + "&apikey=" + process.env.ETHERSCAN_API
+	let url = "https://api.bscscan.com/api?module=contract&action=getsourcecode&address=" + address + "&apikey=" + process.env.BSCSCAN_API
 	try {
 		const response = await axios.get(url);
 		return response.data.result[0];

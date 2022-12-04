@@ -1,17 +1,16 @@
 require("dotenv").config()
-const Utils = require('../utils/Utils')
-const chain = Utils.chains.POLYGON
-const axios = require("axios")
 const Web3 = require("web3")
-const mysql = require('../utils/MysqlGateway')
-const rpcEndpoints = require("../data/rpcEndpoints")[chain]
+const Utils = require('../../utils/Utils')
+const chain = Utils.chains.BSC_MAINNET
+const mysql = require('../../utils/MysqlGateway')
+const axios = require("axios")
+const rpcEndpoints = require("../../data/rpcEndpoints")[chain]
 let web3 = [], web3Index = 0
-
-const contrAggregatorAddress = "0x16Fe0557A0958dE762e3d40DEEd9529e21845b04"
-const contrAggregatorABI = '[{"inputs":[{"internalType":"address[]","name":"targets","type":"address[]"}],"name":"areContracts","outputs":[{"internalType":"bool[]","name":"","type":"bool[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"target","type":"address"}],"name":"isContract","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}]'
+const contrAggregatorAddress = "0x72A041660Bb132EdAAeF759CCF8585CFa14b65C5"
+const contrAggregatorABI = '[{"inputs":[{"internalType":"address[]","name":"targets","type":"address[]"}],"name":"areContracts","outputs":[{"internalType":"bool[]","name":"","type":"bool[]"}],"stateMutability":"view","type":"function"}]'
 let abi = JSON.parse(contrAggregatorABI)
 let dbConn 
-let aggregatorContract = []
+let aggregatorContract = [] 
 
 bootstrapWeb3()
 main()
@@ -27,6 +26,8 @@ async function main(){
 }
 
 function bootstrapWeb3(){
+  web3.length = 0
+  aggregatorContract.length = 0
   for(let endp of rpcEndpoints){
     web3.push(new Web3(endp))
     aggregatorContract.push(new web3[web3.length - 1].eth.Contract(abi, contrAggregatorAddress))
@@ -64,13 +65,11 @@ async function parseBlock(blockIndex){
   }
   catch(e){
     console.log("ERROR PARSING BLOCK #" + blockIndex, e.message)
-    web3 = new Web3(polygonRpc);
-    aggregatorContract = new web3.eth.Contract(abi, contrAggregatorAddress)
+    bootstrapWeb3()
     return false
   }
   return true
 }
-
 
 async function getBlockObject(blockNumber){
   let rpcEndp = getRpcEndpoint()

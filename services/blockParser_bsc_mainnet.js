@@ -69,22 +69,22 @@ async function parseBlock(blockIndex){
 }
 
 async function getBlockObject(blockNumber){
-let rpcEndp = getRpcEndpoint()
-let data = {
-	"jsonrpc":"2.0",
-	"method":"eth_getBlockByNumber",
-	"params":[
-		'0x' + blockNumber.toString(16), 
-		true
-	],
-	"id":1
-  }
-  const res = await axios.post(rpcEndp, data, {
-  headers: {
-    'content-type': 'application/json'
-  }
-});
-return res.data.result 
+  let rpcEndp = getRpcEndpoint()
+  let data = {
+    "jsonrpc":"2.0",
+    "method":"eth_getBlockByNumber",
+    "params":[
+      '0x' + blockNumber.toString(16), 
+      true
+    ],
+    "id":1
+    }
+    const res = await axios.post(rpcEndp, data, {
+    headers: {
+      'Accept-Encoding': 'application/json'
+    }
+  });
+  return res.data.result 
 }
 
 function getRpcEndpoint(){ // round robin

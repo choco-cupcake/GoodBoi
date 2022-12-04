@@ -8,13 +8,13 @@ async function updateLastParsedBlock(conn, block, chain){
   try{
     let [data, fields] = await conn.query(query, block);
     if(!data.affectedRows){
-      Utils.printQueryError(query, block, "Error setting lastParsedBlock_eth_mainnet")
+      Utils.printQueryError(query, block, "Error setting " + field)
       return false
     }
     return true
   }
   catch(e){
-    Utils.printQueryError(query, block, "Error setting lastParsedBlock_eth_mainnet - " + e.message)
+    Utils.printQueryError(query, block, "Error setting " + field + " - " + e.message)
     return false
   }
 }
@@ -25,13 +25,13 @@ async function getLastParsedBlock(conn, chain){
     try{
       let [data, fields] = await conn.query(query)
       if(!data.length){
-        console.log("WARNING - Can't get last parsed block - length = 0")
+        console.log("WARNING - Can't get " + field + " - length = 0")
         return null
       }
       return data[0][field]
     }
     catch(e){
-      console.log("ERROR - Can't get last parsed block", e.message)
+      console.log("ERROR - Can't get " + field, e.message)
       return null
     }
 }
@@ -72,7 +72,7 @@ async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
     return data
   }
   catch(e){
-    Utils.printQueryError(query, chain, e.message)
+    Utils.printQueryError(query, [chain, daysOld, +batchSize], e.message)
     return []
   }
 }

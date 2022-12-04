@@ -4,6 +4,7 @@ function printQueryError(query, params, error = null){
 
 const chains = {
       ETH_MAINNET: "ETH_MAINNET",
-      BSC_MAINNET: "BSC_MAINNET"
+      BSC_MAINNET: "BSC_MAINNET",
+      POLYGON: "POLYGON"
     }
 module.exports = {printQueryError, chains}

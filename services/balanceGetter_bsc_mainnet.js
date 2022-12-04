@@ -126,12 +126,12 @@ async function getAggregatedHoldings(addresses){
 
 async function getAllQuotes(){
   console.log("Getting ERC20 quotes");
-  for(let i=0; i < ERC20_of_interest.length; i++){ // skip native ETH. kept in the same struct bc price aggregator contract accepts it
+  for(let i=1; i < ERC20_of_interest.length; i++){ // skip native ETH. kept in the same struct bc price aggregator contract accepts it
     let r = await moralisGetPriceUSD(ERC20_of_interest[i].address)
     if(!isNaN(r?.data?.usdPrice)){
       ERC20_of_interest[i]['USD_price'] = r.data.usdPrice
-      if(ERC20_of_interest[i].token == "wETH")
-        ERC20_of_interest[0]['USD_price'] = r.data.usdPrice // assign wETH price to ETH
+      if(ERC20_of_interest[i].token == "WBNB")
+        ERC20_of_interest[0]['USD_price'] = r.data.usdPrice // assign WBNB price to BNB
     }
     else{
       console.log("ERROR getting fresh price for token " + ERC20_of_interest[i].token, "Fix and retry")

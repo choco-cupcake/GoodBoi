@@ -2,6 +2,37 @@ const Database = require('./DB');
 const Utils = require('./Utils');
 
 
+async function getLastBackupDB(){
+  let query = "SELECT lastBackupDB FROM status WHERE ID=1 AND DATE_SUB(NOW(), INTERVAL ? HOUR) > lastBackupDB;"
+  try{
+    let [data, fields] = await conn.query(query)
+    if(!data.length){
+      return null
+    }
+    return data[0].lastBackupDB
+  }
+  catch(e){
+    console.log("ERROR - Can't get lastBackupDB", e.message)
+    return null
+  }
+}
+
+async function updateLastBackupDB(){
+  let query = "UPDATE status SET lastBackupDB = NOW() WHERE ID=1;"
+  try{
+    let [data, fields] = await conn.query(query);
+    if(!data.affectedRows){
+      Utils.printQueryError(query, [], "Error setting lastBackupDB")
+      return false
+    }
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, [], "Error setting lastBackupDB - " + e.message)
+    return false
+  }
+}
+
 async function updateLastParsedBlock(conn, block, chain){
   let field = 'lastParsedBlock_' + chain.toLowerCase()
   let query = "UPDATE status set " + field + " = ? WHERE ID = 1"
@@ -21,19 +52,52 @@ async function updateLastParsedBlock(conn, block, chain){
 
 async function getLastParsedBlock(conn, chain){
   let field = 'lastParsedBlock_' + chain.toLowerCase()
-    let query = "SELECT " + field + " FROM status WHERE ID=1;"
-    try{
-      let [data, fields] = await conn.query(query)
-      if(!data.length){
-        console.log("WARNING - Can't get " + field + " - length = 0")
-        return null
-      }
-      return data[0][field]
-    }
-    catch(e){
-      console.log("ERROR - Can't get " + field, e.message)
+  let query = "SELECT " + field + " FROM status WHERE ID=1;"
+  try{
+    let [data, fields] = await conn.query(query)
+    if(!data.length){
+      console.log("WARNING - Can't get " + field + " - length = 0")
       return null
     }
+    return data[0][field]
+  }
+  catch(e){
+    console.log("ERROR - Can't get " + field, e.message)
+    return null
+  }
+}
+
+async function updateLastParsedBlockDownward(conn, block, chain){
+  let field = 'downwardBlock_' + chain.toLowerCase()
+  let query = "UPDATE status set " + field + " = ? WHERE ID = 1"
+  try{
+    let [data, fields] = await conn.query(query, block);
+    if(!data.affectedRows){
+      Utils.printQueryError(query, block, "Error setting " + field)
+      return false
+    }
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, block, "Error setting " + field + " - " + e.message)
+    return false
+  }
+}
+async function getLastParsedBlockDownward(conn, chain){
+  let field = 'downwardBlock_' + chain.toLowerCase()
+  let query = "SELECT " + field + " FROM status WHERE ID=1;"
+  try{
+    let [data, fields] = await conn.query(query)
+    if(!data.length){
+      console.log("WARNING - Can't get " + field + " - length = 0")
+      return null
+    }
+    return data[0][field]
+  }
+  catch(e){
+    console.log("ERROR - Can't get " + field, e.message)
+    return null
+  }
 }
 
 
@@ -399,4 +463,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

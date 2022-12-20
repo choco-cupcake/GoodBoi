@@ -11,6 +11,7 @@ const contrAggregatorABI = '[{"inputs":[{"internalType":"address[]","name":"targ
 let abi = JSON.parse(contrAggregatorABI)
 let dbConn 
 let aggregatorContract = [] 
+let lastBlockParsed
 
 bootstrapWeb3()
 main()
@@ -37,18 +38,20 @@ function bootstrapWeb3(){
 async function parseBlocks(){
   dbConn = await mysql.getDBConnection()
   // read last block scraped from DB
-  let lastBlockParsed = (await mysql.getLastParsedBlockDownward(dbConn, chain))
+  lastBlockParsed = (await mysql.getLastParsedBlockDownward(dbConn, chain))
   console.log("lastBlockParsed:",lastBlockParsed)
 
-  // loop parse blocks
-  let blockNo = lastBlockParsed
-  while(true){
-    await parseBlock(blockNo)
-    blockNo--
+  for(let i=0;i<5;i++){
+    parseBlock()
   }
 }
 
-async function parseBlock(blockIndex){
+function getBlockIndex(){
+  return --lastBlockParsed
+}
+
+async function parseBlock(){
+  let blockIndex = getBlockIndex()
   try{
     console.log("Block #" + blockIndex)
     let txObj = await getBlockObject(blockIndex)
@@ -62,9 +65,8 @@ async function parseBlock(blockIndex){
   catch(e){
     console.log("ERROR PARSING BLOCK #" + blockIndex, e.message)
     bootstrapWeb3()
-    return false
   }
-  return true
+  await parseBlock()
 }
 
 async function getBlockObject(blockNumber){

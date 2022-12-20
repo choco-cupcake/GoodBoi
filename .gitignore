@@ -6,3 +6,4 @@ node_modules/
 trash/
 tmp_analysis/
 dev/
+custom_detectors/

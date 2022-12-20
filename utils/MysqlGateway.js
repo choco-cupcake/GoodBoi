@@ -2,10 +2,10 @@ const Database = require('./DB');
 const Utils = require('./Utils');
 
 
-async function getLastBackupDB(){
+async function getLastBackupDB(conn, backupTime){
   let query = "SELECT lastBackupDB FROM status WHERE ID=1 AND DATE_SUB(NOW(), INTERVAL ? HOUR) > lastBackupDB;"
   try{
-    let [data, fields] = await conn.query(query)
+    let [data, fields] = await conn.query(query, backupTime)
     if(!data.length){
       return null
     }
@@ -17,7 +17,7 @@ async function getLastBackupDB(){
   }
 }
 
-async function updateLastBackupDB(){
+async function updateLastBackupDB(conn){
   let query = "UPDATE status SET lastBackupDB = NOW() WHERE ID=1;"
   try{
     let [data, fields] = await conn.query(query);

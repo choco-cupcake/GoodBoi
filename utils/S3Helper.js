@@ -1,4 +1,5 @@
 // Based on Glacier's example: http://docs.aws.amazon.com/AWSJavaScriptSDK/guide/examples.html#Amazon_Glacier__Multi-part_Upload
+require("dotenv").config()
 var fs = require('fs');
 var AWS = require('aws-sdk');
 AWS.config = new AWS.Config()

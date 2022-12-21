@@ -3,7 +3,7 @@ const fs = require("fs")
 const AWS = require('aws-sdk')
 const mysqldump = require('mysqldump')
 const Utils = require('../utils/Utils')
-const S3Helper = require("../Utils/S3Helper.js")
+const S3Helper = require("../utils/S3Helper.js")
 const mysql = require('../utils/MysqlGateway')
 
 const backupTime =  process.env.MYSQL_BACKUP_HOURS
@@ -26,17 +26,24 @@ async function backupDB(){
     console.log("Not yet time to backup. Abort")
     return
   }
+  console.log("Backup started")
   let bkObj = await backupToFile()
+  console.log(bkObj.filename, " created")
   let toRemove = await deleteOldBackupLocal()
+  console.log("toRemove: ", toRemove)
   // upload to s3
   let S3Obj = await S3Helper.pushToBucket(bkObj.path, bkObj.filename, bucketName)
+  console.log("File sent to S3")
   console.log(S3Obj)
   // delete toRemove from s3
-  if(toRemove)
+  if(toRemove){
     await S3Helper.deleteFileFromBucket(bucketName, toRemove)
+    console.log("Removed old backup from S3")
+  }
 
   // update backup date
   await mysql.updateLastBackupDB(dbConn)
+  console.log("Done")
 
 }
 

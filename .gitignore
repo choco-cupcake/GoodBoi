@@ -7,3 +7,4 @@ trash/
 tmp_analysis/
 dev/
 custom_detectors/
+mysqlBackup/

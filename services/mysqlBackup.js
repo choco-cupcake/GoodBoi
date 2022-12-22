@@ -49,7 +49,8 @@ async function backupDB(){
 
 async function deleteOldBackupLocal(){
   let files = fs.readdirSync("./mysqlBackup")
-  if(files.length < 2) 
+    .filter(e => e.substring(e.length-5) != ".temp") // fix add timeout in cjs.js mysqldump library
+  if(files.length <= 3) // keep last 3 backups
     return null
   // sort names ascending
   files.sort((a,b) => a.localeCompare(b))
@@ -62,7 +63,7 @@ async function deleteOldBackupLocal(){
 async function backupToFile(){
   let fname = "dump_" + Date.now() + ".sql.gz"
   let fpath = "./mysqlBackup/" + fname
-
+  
   await mysqldump({
     connection: {
         host: process.env.DB_HOST,
@@ -72,7 +73,7 @@ async function backupToFile(){
     },
     dumpToFile: fpath,
     compressFile: true,
-  });
+  }); 
   return {path: fpath, filename: fname}
 }
 

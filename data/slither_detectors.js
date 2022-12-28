@@ -1,4 +1,5 @@
-const detectors_slither_high = ["abiencoderv2-array","arbitrary-send-erc20","array-by-reference","incorrect-shift","multiple-constructors","name-reused","protected-vars","public-mappings-nested","rtlo","shadowing-state","suicidal","uninitialized-state","uninitialized-storage","unprotected-upgrade","arbitrary-send-erc20-permit","arbitrary-send-eth","controlled-array-length","controlled-delegatecall","delegatecall-loop","msg-value-loop","reentrancy-eth","storage-array","unchecked-transfer","weak-prng"] // high impact only
+const detectors_slither_high = ["arbitrary-send-erc20","incorrect-shift","shadowing-state","arbitrary-send-erc20-permit",
+  "arbitrary-send-eth","controlled-array-length","controlled-delegatecall","reentrancy-eth","unchecked-transfer"] // high impact only, to be modified to boost precision
 const custom_detectors = ["public-mint"]
 
 module.exports = {custom_detectors, detectors_slither_high}

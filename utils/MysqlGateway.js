@@ -201,7 +201,7 @@ async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
   }
 }
 
-async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
+async function getBatchToAnalyze(conn, len, chain, minUsdValue, compilerVersionInt, detectors){
 // analysis table analyzes sourcefile, not contract. results viewer will get related contracts
   let endOfResults = false
   let limit = (len * 5) // 5 files per contract on avg
@@ -211,7 +211,7 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
             "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
             minUsdValue != 0 ? "INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address " : "",
             "LEFT JOIN slither_analysis AS an ON an.contract = c.ID ",
-            "WHERE an.failedAnalysis <= 3 ",
+            "WHERE an.failedAnalysis <= 3 AND c.compilerVersion_int = ? ",
             chain != 'all' ? "AND c.chain = ? " : "",
             minUsdValue != 0 ? "AND b.usdValue >= ? " : "",
             detSub,  // keeps only contracts not yet analyzed for these detectors
@@ -219,7 +219,7 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
   console.log(query)
 
   // build query params array
-  let queryParams = []
+  let queryParams = [compilerVersionInt]
   if(chain != 'all') queryParams.push(chain)
   if(minUsdValue != 0) queryParams.push(minUsdValue)
 
@@ -281,8 +281,11 @@ async function markContractAsAnalyzed(conn, contractID){
   }
 }
 
-async function markContractAsErrorAnalysis(conn, contractID){
-  let query = "UPDATE slither_analysis set `failedAnalysis` = `failedAnalysis` + 1 WHERE contract = ?"
+async function markContractAsErrorAnalysis(conn, contractID, reset = false){
+  let query = reset ?
+    "UPDATE slither_analysis set `failedAnalysis` = 0 WHERE contract = ?"
+    :
+    "UPDATE slither_analysis set `failedAnalysis` = `failedAnalysis` + 1 WHERE contract = ?"
   try{
     let [data, fields] = await conn.query(query, contractID);
     if(!data.affectedRows){
@@ -298,51 +301,29 @@ async function markContractAsErrorAnalysis(conn, contractID){
 }
 
 
-async function insertFindingsToDB(conn, contractID, findings){ 
-  return
+async function insertFindingsToDB(conn, contractID, output){ 
   // try to update the existing record, insert if update fails 
-  let query = "UPDATE analysis SET " + buildFindingsUpdateSubquery(findings.findings) + " WHERE contract = ?"
+  let query = "UPDATE slither_analysis SET " + buildFindingsUpdateSubquery(output) + " WHERE contract = ?"
   try{
-    let [data, fields] = await conn.query(query, [contractID]);
-    if(!data.affectedRows){ // contract not yet analyzed by any detector
-      return _insertFindingsToDB(conn, contractID, findings) // insert new record
+    let [data, fields] = await conn.query(query, [output.report, contractID]);
+    if(!data.affectedRows){ 
+      Utils.printQueryError(query, [contractID, output.findings], "Error updating analysis record - 0 affected rows")
     }
+    await markContractAsErrorAnalysis(conn, contractID, true) // reset failedAnalysis to 0
     return true
   }
   catch(e){
-    Utils.printQueryError(query, [contractID, findings.findings], "Error updating analysis record - " + e.message)
+    Utils.printQueryError(query, [contractID, output.findings], "Error updating analysis record - " + e.message)
     return false
   }
 }
 
-function buildFindingsUpdateSubquery(findings){
+function buildFindingsUpdateSubquery(output){
   let ret = []
-  for(let k of Object.keys(findings))
-    ret.push("`" + k + "` = " + findings[k])
+  for(let k of Object.keys(output.findings))
+    ret.push("`" + k + "` = " + output.findings[k])
+  ret.push("`report` = ?")
   return ret.join(", ")
-}
-
-async function _insertFindingsToDB(conn, contractID, findings){ 
-  let query = "INSERT INTO analysis (contract,report,`" + Object.keys(findings.findings).join("`,`") + "`) VALUES (" + [contractID, "?", ...Object.values(findings.findings)].join(",") + ")"
-  console.log(query)
-  try{
-    let [data, fields] = await conn.query(query, findings.report);
-    if(!data.affectedRows){
-      Utils.printQueryError(query, [], "Error pushing analysis")
-      return false
-    }
-    if(!data.insertId){
-      Utils.printQueryError(query, [], "Error pushing analysis - insertID is null")
-      return false
-    }
-    await markContractAsAnalyzed(conn, contractID) // temporary to track analyzed contract, to be removed once everything is stable
-    console.log("#" + contractID + " inserted to database") 
-    return true
-  }
-  catch(e){
-    Utils.printQueryError(query, [], "Error pushing analysis - " + e.message)
-    return false
-  }
 }
 
 async function markAsUnverified(conn, chain, address){
@@ -413,6 +394,10 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
     }
   }
 
+  // create empty analysis record
+  let query = "INSERT INTO slither_analysis (contract, report) VALUES (?, '')"
+  await performInsertQuery(conn, query, contractID)
+  
   // remove address from addresspool
   await deleteAddressFromPool(conn, chain, contractAddress)
 

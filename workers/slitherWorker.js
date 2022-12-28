@@ -6,55 +6,45 @@ const Utils = require('../utils/Utils');
 runAnalysis()
 
 async function runAnalysis(){
-  setTimeout(() => { console.log("######## WORKER KILLED"); process.exit() }, 20000)
+  //setTimeout(() => { console.log("######## WORKER KILLED"); process.exit() }, 20000)
   let startTime = Date.now()
-  let resultsRaw = await executeSlither(workerData.folderpath, workerData.detectors)
-  let findings = inspectSlitherOutput(resultsRaw)
+  let slitherOutput = await executeSlither(workerData.folderpath, workerData.detectors)
+  let slitherResult = inspectSlitherOutput(slitherOutput, workerData.detectors)
+  console.log(slitherResult)
   let elapsed = Date.now() - startTime
   console.log("ELAPSED " + elapsed)
-  parentPort.postMessage(findings);
+  parentPort.postMessage(slitherResult);
   process.exit()
 }
 
 function executeSlither(folderpath, detectors){
-  let output = ''
-  const slitherProg = spawnSync('python3', ['-m', 'slither.__main__', folderpath, '--checklist', '--detect', detectors.join(",")]); 
-  let err = slitherProg.stderr.toString()
+  let slitherParams = ['-m', 'slither.__main__', folderpath, '--checklist', '--detect', detectors.join(","), '--json', '-']
+  // run slither
+  const slitherProg = spawnSync('python3', slitherParams); 
   let out = slitherProg.stdout.toString()
-  return {err: err, out: out}
+  return JSON.parse(out)
 }
 
-function inspectSlitherOutput(results){ 
-  if(!results.out.length){
-    if(results.err.includes("Error: Function needs to specify overridden contracts "))
-      console.log("REQUIRED EXPLICIT OVERRIDE")
-    else if(results.err.includes("Error: Source file requires different compiler version "))
-      console.log("DIFFERENT COMPILER VERSIONS")
-    else{
-      console.log("============== OTHER ERROR")
-      //console.log("results.err: ", results.err)
-    }
-    return {error: "SLITHER_EMPTY_OUTPUT"}
-  } 
-  let summary = results.out.substring("Summary\r\n".length)
-  let findings = {}
-  if(!summary.indexOf("## ")) 
-    return findings // no findings
-  let findingsStrings = summary.split("## ").slice(1)
-  for(let findStr of findingsStrings){    
-    let name = findStr.split("\r\n")[0].trim()
-    let count = findStr.split(" - [ ] ID-").length - 1
-    if(!workerData.detectors.includes(name)){
-      console.log("ERROR Unrecognized detector '" + name + "'")
-    }
-    else{
-      findings[name] = count
-    }
+function inspectSlitherOutput(slitherOutput, detectorsUsed){ 
+  if(!slitherOutput.success){
+    return {success: false}
   }
-  // add count = 0 for detectors that found no issues
-  for(let d of workerData.detectors){
-    if(!findings[d])
-      findings[d] = 0
+  if(!slitherOutput.success){
+    return {success: true, report: '', findings: []}
   }
-  return {report: summary, findings: findings}
+  let descriptions = []
+  let detectorsHit = new Set()
+  for(let det of slitherOutput.results.detectors){
+    detectorsHit.add(det.check)
+    descriptions.push(det.description)
+  }
+  // build the full detectors outcome
+  let detectorsResult = {}
+  for(let det of detectorsUsed){
+    let v = 0
+    if(detectorsHit.has(det)) 
+      v = 1
+    detectorsResult[det] = v
+  }
+  return {success: true, report: descriptions.join("\n"), findings: detectorsResult}
 }

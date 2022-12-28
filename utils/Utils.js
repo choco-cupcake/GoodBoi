@@ -1,4 +1,6 @@
-const crypto = require("crypto");
+const crypto = require("crypto")
+const fs = require('fs')
+const path = require('path')
 class Utils {
 
   static chains = {
@@ -54,6 +56,32 @@ class Utils {
     return line.trim().substring(0, pattern.length) == pattern
   }
   
+  static async emptyFolder(folderPath) {
+    try {
+        // Find all files in the folder
+        let _files = fs.readdirSync(folderPath);
+        for (const file of _files) {
+          let filePath = path.join(folderPath, file)
+          if(fs.lstatSync(filePath).isDirectory()){
+            this.deleteFolder(filePath)
+          }
+          else{
+            fs.unlinkSync(filePath);
+          }
+        }
+        console.log(`tmp_analysis folder cleaned`);
+    } catch (err){
+        console.log(err);
+    }
+  }
+  
+  static async deleteFolder(folder){
+    try {
+      fs.rmSync(folder, { recursive: true })
+    } catch(e) {
+      console.log(e)
+    } 
+  }
 }
 
 module.exports = Utils;

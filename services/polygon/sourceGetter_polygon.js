@@ -85,12 +85,15 @@ async function crawlSourceCode(chain, address){
 		return
 	}
 	contractInfo.SourceCode = contractsToObject(contractInfo.SourceCode)
-  
-
 	if(contractInfo.SourceCode == "ERROR_ZERO_LENGTH"){
 		console.log("ERROR Etherscan API - Got zero length source code of " + address)
 		return
 	}
+  
+	// compute main compiler version (e.g. 'v0.8.9+commit.e5eed63a' -> '0.8'), to make it efficiently queriable
+	let t = contractInfo.CompilerVersion.split('.',3)
+	contractInfo['CompilerVersion_int'] = t[0].substring(1) + '.' + t[1]
+
 	let insertRet = await mysql.pushSourceFiles(mysqlConn, chain, contractInfo, address)
 	if(insertRet)
 		console.log("OK " + address)

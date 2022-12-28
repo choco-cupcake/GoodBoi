@@ -86,6 +86,9 @@ async function crawlSourceCode(chain, address){
 	}
 	contractInfo.SourceCode = contractsToObject(contractInfo.SourceCode)
   
+	// compute main compiler version (e.g. 'v0.8.9+commit.e5eed63a' -> '0.8'), to make it efficiently queriable
+	let t = contractInfo.CompilerVersion.split('.',3)
+	contractInfo['CompilerVersion_int'] = t[0].substring(1) + '.' + t[1]
 
 	if(contractInfo.SourceCode == "ERROR_ZERO_LENGTH"){
 		console.log("ERROR Etherscan API - Got zero length source code of " + address)
@@ -124,7 +127,8 @@ function contractsToObject(source){
 	return filesList
 }
 
-function cleanVerificationDateHeader(source){
+function cleanVerificationDateHeader(source){ // edit: actually useless as header is added only to single files,
+																							// and single files are always unique 
   if(source.substring(0,70).includes("Submitted for verification at BscScan.com on ")){
     let index = source.indexOf("*/")
     if(index != -1){

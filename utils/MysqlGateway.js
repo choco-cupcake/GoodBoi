@@ -1,6 +1,66 @@
 const Database = require('./DB');
 const Utils = require('./Utils');
 
+async function getSiblingsSourceFiles(conn, sourceFileID){ 
+  let contract = getRandomContractFromSourceFile(conn, sourceFileID) // important to try multiple contracts in case of compilation failure. Had to move it out of the query since RAND() fucks up performance
+  let query = "SELECT csf.filename, sf.sourceText, sa.* FROM `sourcefile` AS sf INNER JOIN slither_analysis AS sa ON sa.sourcefile = sf.ID INNER JOIN contract_sourcefile AS csf ON csf.sourcefile = sf.ID AND csf.contract = ?;"
+  try{
+    let [data, fields] = await conn.query(query, contract)
+    if(!data.length){
+      console.log("ERROR - Can't get siblings source files")
+      return null
+    }
+    return data
+  }
+  catch(e){
+    console.log("ERROR - Can't get siblings source files", e.message)
+    return null
+  }
+}
+
+async function getRandomContractFromSourceFile(conn, sourceFileID){ 
+  let query = "SELECT contract FROM contract_sourcefile WHERE sourcefile = ? LIMIT 100;"
+  try{
+    let [data, fields] = await conn.query(query, sourceFileID)
+    if(!data.length){
+      console.log("ERROR - Can't get random contract from source file")
+      return null
+    }
+    return data.length == 1 ? data[0] : data[Math.round(Math.random * (data.length - 1))]
+  }
+  catch(e){
+    console.log("ERROR - Can't get random contract from source file", e.message)
+    return null
+  }
+}
+
+async function addSlitherAnalysisColumns(conn, columnName){
+  let query = "ALTER TABLE slither_analysis ADD COLUMN ? TINYINT DEFAULT -1;"
+  try{
+    await conn.query(query, columnName);
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, [], "Error adding slither_analysis column - " + e.message)
+    return false
+  }
+}
+
+async function getSlitherAnalysisColumns(conn){
+  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis';"
+  try{
+    let [data, fields] = await conn.query(query)
+    if(!data.length){
+      console.log("ERROR - Can't get slither_analysis columns")
+      return null
+    }
+    return data
+  }
+  catch(e){
+    console.log("ERROR - Can't get slither_analysis columns", e.message)
+    return null
+  }
+}
 
 async function getLastBackupDB(conn, backupTime){
   let query = "SELECT lastBackupDB FROM status WHERE ID=1 AND DATE_SUB(NOW(), INTERVAL ? HOUR) > lastBackupDB;"
@@ -143,22 +203,28 @@ async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
 
 async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
 // analysis table analyzes sourcefile, not contract. results viewer will get related contracts
-
-
   let endOfResults = false
   let limit = (len * 5) // 5 files per contract on avg
   let detSub = buildDetectorsFindSubquery(detectors)
-  let query = ''.concat("SELECT DISTINCT sf.* FROM contract AS c ",  
+  let query = ''.concat("SELECT DISTINCT csf.contract, csf.filename, sf.*, an.* FROM contract AS c ",  
             "INNER JOIN contract_sourcefile AS csf ON csf.contract = c.ID ",
             "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
-            "INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address ",
-            "LEFT JOIN analysis AS an ON an.contract = c.ID ",
-            "WHERE c.chain = ? AND b.usdValue >= ? AND c.compiler_error=0 ", // AND c.analyzed_std=0 
-            detSub,  // keeps only contracts not yet analyzed for these detectors (NULL if contract has not been analyzed yet for any detector)
+            minUsdValue != 0 ? "INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address " : "",
+            "LEFT JOIN slither_analysis AS an ON an.contract = c.ID ",
+            "WHERE an.failedAnalysis <= 3 ",
+            chain != 'all' ? "AND c.chain = ? " : "",
+            minUsdValue != 0 ? "AND b.usdValue >= ? " : "",
+            detSub,  // keeps only contracts not yet analyzed for these detectors
             "LIMIT ", limit)
   console.log(query)
+
+  // build query params array
+  let queryParams = []
+  if(chain != 'all') queryParams.push(chain)
+  if(minUsdValue != 0) queryParams.push(minUsdValue)
+
   try{
-    let [data, fields] = await conn.query(query, [chain, minUsdValue])
+    let [data, fields] = await conn.query(query, queryParams)
     if(!data.length){
       console.log("WARNING - Can't get contracts to analyze - length = 0")
       return {eor: true, data: []}
@@ -168,7 +234,7 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
     }
     else{
       let lastContract = data.at(-1).contract
-      data = data.filter(e => e.contract != lastContract) // last contract may lack some files
+      data = data.filter(e => e.contract != lastContract) // remove last contract since it may lack some files
     }
     let contracts = []
     for(let d of data) // group files by contract
@@ -176,8 +242,13 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
         contracts.push(d.contract)
     let returnData = []
     for(let c of contracts){
+      // get files
       let files = data.filter(e => e.contract == c)
-      returnData.push({ID: c, files: files})
+      // exclude already run detectors
+      let usedDetectors = Object.keys(files[0]).filter(e => !['contract', 'filename',  'ID',  'sourceText',  'sourceHash',  'failedAnalysis',  'report'].includes(e) && files[0][e] != '-1')
+      let detectorsToUse = detectors.filter(e => !usedDetectors.includes(e)) // detectors set by the user - detectors already run on this contract
+      returnData.push({ID: c, files: files, detectors: detectorsToUse})
+
     }
     return {eor: endOfResults, data: returnData}
   }
@@ -190,7 +261,7 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
 function buildDetectorsFindSubquery(detectors){
   let ret = []
   for(let d of detectors)
-    ret.push("(an.`" + d + "` IS NULL OR an.`" + d + "`=-1)")
+    ret.push("(an.`" + d + "`=-1)")
   return " AND (".concat(ret.join(" OR "), ") ")
 }
 
@@ -211,23 +282,24 @@ async function markContractAsAnalyzed(conn, contractID){
 }
 
 async function markContractAsErrorAnalysis(conn, contractID){
-  let query = "UPDATE contract set `compiler_error` = 1 WHERE ID = ?"
+  let query = "UPDATE slither_analysis set `failedAnalysis` = `failedAnalysis` + 1 WHERE contract = ?"
   try{
     let [data, fields] = await conn.query(query, contractID);
     if(!data.affectedRows){
-      Utils.printQueryError(query, contractID, "Error setting contract as analyzed")
+      Utils.printQueryError(query, contractID, "Error updating failedAnalysis")
       return false
     }
     return true
   }
   catch(e){
-    Utils.printQueryError(query, contractID, "Error setting contract as analyzed - " + e.message)
+    Utils.printQueryError(query, contractID, "Error updating failedAnalysis - " + e.message)
     return false
   }
 }
 
 
 async function insertFindingsToDB(conn, contractID, findings){ 
+  return
   // try to update the existing record, insert if update fails 
   let query = "UPDATE analysis SET " + buildFindingsUpdateSubquery(findings.findings) + " WHERE contract = ?"
   try{
@@ -292,9 +364,9 @@ async function markAsUnverified(conn, chain, address){
 
 async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   // create contract record
-  let contractQuery = "INSERT INTO contract (chain, address, contractName, compilerVersion, optimizationUsed, runs, constructorArguments, EVMVersion, library, licenseType, proxy, implementation, swarmSource)" +
-    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
-  let contractID = await performInsertQuery(conn, contractQuery, [chain, contractAddress, contractObj.ContractName, contractObj.CompilerVersion, contractObj.OptimizationUsed, contractObj.Runs, 
+  let contractQuery = "INSERT INTO contract (chain, address, contractName, compilerVersion, compilerVersion_int, optimizationUsed, runs, constructorArguments, EVMVersion, library, licenseType, proxy, implementation, swarmSource)" +
+    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+  let contractID = await performInsertQuery(conn, contractQuery, [chain, contractAddress, contractObj.ContractName, contractObj.CompilerVersion, contractObj.CompilerVersion_int, contractObj.OptimizationUsed, contractObj.Runs, 
     contractObj.ConstructorArguments,contractObj.EVMVersion, contractObj.Library, contractObj.LicenseType, contractObj.Proxy, contractObj.Implementation, contractObj.SwarmSource], true)
   if(!contractID || contractID.error){
     if(contractID.error == 'ER_DUP_ENTRY'){
@@ -463,4 +535,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {getSiblingsSourceFiles, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

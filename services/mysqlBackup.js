@@ -13,10 +13,8 @@ let dbConn
 main() 
 
 async function main(){
-  while(true){
-    await backupDB()
-    await Utils.sleep(30 * 60 * 1000) // 30 min
-  }
+  await backupDB()
+  setTimeout(main, 30 * 60 * 1000) // 30 min
 }
 
 async function backupDB(){

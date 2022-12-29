@@ -25,12 +25,15 @@ function executeSlither(folderpath, detectors){
   return JSON.parse(out)
 }
 
-function inspectSlitherOutput(slitherOutput, detectorsUsed){ 
+function inspectSlitherOutput(slitherOutput, detectorsUsed){
+  let detectorsResult = {} 
   if(!slitherOutput.success){
-    return {success: false}
+    return {success: false, error: slitherOutput.error}
   }
-  if(!slitherOutput.success){
-    return {success: true, report: '', findings: []}
+  if(!slitherOutput.results?.detectors){
+    for(let det of detectorsUsed)
+      detectorsResult[det] = 0
+    return {success: true, report: '', findings: detectorsResult} 
   }
   let descriptions = []
   let detectorsHit = new Set()
@@ -39,7 +42,6 @@ function inspectSlitherOutput(slitherOutput, detectorsUsed){
     descriptions.push(det.description)
   }
   // build the full detectors outcome
-  let detectorsResult = {}
   for(let det of detectorsUsed){
     let v = 0
     if(detectorsHit.has(det)) 

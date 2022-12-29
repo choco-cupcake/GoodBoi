@@ -60,8 +60,8 @@ async function getActiveDetectors(){
 
 async function launchWorker(){
   analyzedCounter++
-  console.log("#" + analyzedCounter + " start")
   let contract = await contractPool.pop()
+  console.log("#" + contract.ID + " start")
   let folderpath = preparePath(contract.files)
   _launchWorker(contract, folderpath)
 }
@@ -72,7 +72,7 @@ async function workerCleanup(toClean){
     await mysql.insertFindingsToDB(mysqlConn, toClean.contractID, toClean.output)
   }
   else{
-    console.log("Analysis of contract ID=" + toClean.contractID + " resulted in an ERROR")
+    console.log("Analysis of contract ID=" + toClean.contractID + " resulted in an ERROR:", toClean?.output?.error)
     await mysql.markContractAsErrorAnalysis(mysqlConn, toClean.contractID)
   }
   await Utils.deleteFolder(toClean.folderpath)

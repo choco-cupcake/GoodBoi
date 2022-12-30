@@ -1,17 +1,20 @@
 const fs = require('fs')
 const path = require('path')
-const { spawn } = require('child_process');
+const { spawnSync } = require('child_process');
 const { Worker } = require('worker_threads');
 const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');
 const Detectors = require('../data/slither_detectors');
 
+// one more breaking change (override) at 0.8.12
+const solcHighestVer = {'0.4': '0.4.26', '0.5': '0.5.17', '0.6': '0.6.12', '0.7': '0.7.6', '0.8.11': '0.8.11', '0.8': '0.8.17'}
 const slitherInstances = process.env.SLITHER_INSTANCES
 const poolSize = slitherInstances * 100
 let mysqlConn
 let filling = false // concurrency lock pool fill
 let contractPool = []
 let analyzedCounter = 0
+let failedCounter = 0
 let detectorsOfInterest, chain, minUsdValue, compilerVersionInt
 let endOfResults = false
 let activeWorkers = 0
@@ -25,8 +28,7 @@ async function launchAnalysis(_chain, _minUsdValue, _compilerVersion){
   minUsdValue = _minUsdValue || 0
   compilerVersionInt = _compilerVersion || '0.8'
 
-  // todo set solc version based on compilerVersionInt
-
+  await selectSolcVersion()
   await fillPool()
   createAnalysisFolder()
   for(let i=0; i < slitherInstances; i++){
@@ -34,6 +36,14 @@ async function launchAnalysis(_chain, _minUsdValue, _compilerVersion){
     activeWorkers++
     await Utils.sleep(100)
   }
+}
+
+async function selectSolcVersion(){
+  let solcLatest = solcHighestVer[compilerVersionInt]
+  let solc_selectParams = ['-m', 'solc_select.__main__', 'use', solcLatest] // solc_elect/__main__.py had to be modified 
+  const solc_selectProg = spawnSync('python3', solc_selectParams); 
+  let out = solc_selectProg.stdout.toString()
+  console.log(out)
 }
 
 async function createAnalysisFolder(){ // buffer to write .sol file to feed slither
@@ -61,7 +71,7 @@ async function getActiveDetectors(){
 async function launchWorker(){
   analyzedCounter++
   let contract = await contractPool.pop()
-  console.log("#" + contract.ID + " start")
+  console.log("#" + contract.ID + " start - " + failedCounter + "/" + analyzedCounter + " failed")
   let folderpath = preparePath(contract.files)
   _launchWorker(contract, folderpath)
 }
@@ -72,6 +82,7 @@ async function workerCleanup(toClean){
     await mysql.insertFindingsToDB(mysqlConn, toClean.contractID, toClean.output)
   }
   else{
+    failedCounter++
     console.log("Analysis of contract ID=" + toClean.contractID + " resulted in an ERROR:", toClean?.output?.error)
     await mysql.markContractAsErrorAnalysis(mysqlConn, toClean.contractID)
   }
@@ -138,10 +149,11 @@ function fixPragma(source){ // replaces pragma x with pragma ^x to solve compila
   for(let line of lines){
     let lineClean = line.trim().toLowerCase()
     if(lineClean.substring(0, pragma_patt.length) == pragma_patt){
+      // identify 0.X and replace with >0.X.0 - the compile with last version of solc 0.X
       let ver = lineClean.substring(pragma_patt.length).replaceAll(">","").replaceAll(">","").replaceAll("=","").replaceAll(";","").replaceAll("^","").trim()
       if(ver.includes(" "))
         ver = ver.split(" ")[0]
-      line = pragma_patt + '>' + ver + ' <0.9.0;'
+      line = pragma_patt + '>=' + ver + ';'
     }
     processed += line + "\n"
   }

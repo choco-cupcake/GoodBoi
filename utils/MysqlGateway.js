@@ -395,7 +395,7 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   }
 
   // create empty analysis record
-  let query = "INSERT INTO slither_analysis (contract, report) VALUES (?, '')"
+  let query = "INSERT INTO slither_analysis (contract, report, error) VALUES (?, '', '')"
   await performInsertQuery(conn, query, contractID.data)
 
   // remove address from addresspool

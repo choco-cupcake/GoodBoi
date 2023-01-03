@@ -121,7 +121,7 @@ function contractsToObject(source){
   let root = src.sources ? src.sources : src // 99% of the sources are wrapped in .sources
 	for(let k of Object.keys(root)){
 		let fileName = k.replaceAll("/", "_")
-		let fileSource = cleanImports(cleanVerificationDateHeader(root[k].content))
+		let fileSource = cleanVerificationDateHeader(root[k].content)
 		filesList.push({filename: fileName, source: fileSource})
 	}
 	return filesList
@@ -142,28 +142,6 @@ function cleanVerificationDateHeader(source){ // edit: actually useless as heade
   return source
 }
 
-function cleanImports(source){
-	let cleanedSource = ''
-	let import_patt = 'import '
-	let breakChars = ["'", "\"", "\\", "/"]
-	let lines = source.split('\n')
-	for(let l of lines){
-		if(Utils.pattMatch(l, import_patt)){
-			let p1 = l.lastIndexOf(".sol")
-			let fileName = ".sol"
-			for(let i=p1-1; i>0; i--){
-				let c = l.charAt(i)
-				if(breakChars.includes(c))
-					break
-				fileName = l.charAt(i) + fileName
-			}
-			cleanedSource += 'import "./' + fileName + '";\n'
-		}
-		else
-		cleanedSource += l + '\n'
-	}
-	return cleanedSource
-}
 
 
 async function getRawSource(address){

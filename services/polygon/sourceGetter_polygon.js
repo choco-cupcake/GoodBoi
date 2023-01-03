@@ -120,7 +120,7 @@ function contractsToObject(source){
 	}
   let root = src.sources ? src.sources : src // 99% of the sources are wrapped in .sources
 	for(let k of Object.keys(root)){
-		let fileName = k.split("/").at(-1)
+		let fileName =  k.replaceAll("/", "_")
 		let fileSource = cleanImports(cleanVerificationDateHeader(root[k].content))
 		filesList.push({filename: fileName, source: fileSource})
 	}

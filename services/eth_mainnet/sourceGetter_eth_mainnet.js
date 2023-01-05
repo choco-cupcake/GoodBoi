@@ -120,9 +120,28 @@ function contractsToObject(source){
 		return ""
 	}
   let root = src.sources ? src.sources : src // 99% of the sources are wrapped in .sources
+	
+	// check if there are multiple contracts with the same name in different folders. 
+	// if so, don't flat the folder structure. folder structure gets flattened by default to avoid maaany possible errors
+	let duplicatedNames = false
+	let buff = []
 	for(let k of Object.keys(root)){
+		let fileName = k.split("/").at(-1)
+		if(buff.includes(fileName)){
+			duplicatedNames = true
+			break
+		}
+		buff.push(fileName)
+	}
+
+	for(let k of Object.keys(root)){
+		let fileName = k // keep folder path if duplicate names
 		let fileSource = root[k].content
-		filesList.push({filename: k, source: fileSource})
+		if(!duplicatedNames){
+			fileName = k.split("/").at(-1) // only keep filename
+			fileSource = Utils.cleanImports(fileSource) // clean imports from path in source
+		}
+		filesList.push({filename: fileName, source: fileSource})
 	}
 	return filesList
 }

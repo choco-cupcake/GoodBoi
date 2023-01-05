@@ -82,6 +82,29 @@ class Utils {
       console.log(e)
     } 
   }
+  
+  static cleanImports(source){
+    let cleanedSource = ''
+    let import_patt = 'import '
+    let breakChars = ["'", "\"", "\\", "/"]
+    let lines = source.split('\n')
+    for(let l of lines){
+      if(Utils.pattMatch(l, import_patt)){
+        let p1 = l.lastIndexOf(".sol")
+        let fileName = ".sol"
+        for(let i=p1-1; i>0; i--){
+          let c = l.charAt(i)
+          if(breakChars.includes(c))
+            break
+          fileName = l.charAt(i) + fileName
+        }
+        cleanedSource += 'import "./' + fileName + '";\n'
+      }
+      else
+      cleanedSource += l + '\n'
+    }
+    return cleanedSource
+  }
 }
 
 module.exports = Utils;

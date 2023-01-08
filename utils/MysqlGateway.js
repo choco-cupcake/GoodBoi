@@ -201,17 +201,17 @@ async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
   }
 }
 
-async function getBatchToAnalyze(conn, len, chain, minUsdValue, compilerVersionInt, detectors){
+async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
 // analysis table analyzes sourcefile, not contract. results viewer will get related contracts
   let endOfResults = false
   let limit = (len * 5) // 5 files per contract on avg
   let detSub = buildDetectorsFindSubquery(detectors)
-  let query = ''.concat("SELECT DISTINCT csf.contract, csf.filename, sf.*, an.* FROM contract AS c ",  
+  let query = ''.concat("SELECT DISTINCT c.compilerVersion, csf.contract, csf.filename, sf.*, an.* FROM contract AS c ",  
             "INNER JOIN contract_sourcefile AS csf ON csf.contract = c.ID ",
             "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
             minUsdValue != 0 ? "INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address " : "",
             "LEFT JOIN slither_analysis AS an ON an.contract = c.ID ",
-            "WHERE an.failedAnalysis <= 3 AND c.compilerVersion_int = ? ",
+            "WHERE an.failedAnalysis = 0 ",
             chain != 'all' ? "AND c.chain = ? " : "",
             minUsdValue != 0 ? "AND b.usdValue >= ? " : "",
             detSub,  // keeps only contracts not yet analyzed for these detectors
@@ -219,7 +219,7 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, compilerVersionI
   console.log(query)
 
   // build query params array
-  let queryParams = [compilerVersionInt]
+  let queryParams = []
   if(chain != 'all') queryParams.push(chain)
   if(minUsdValue != 0) queryParams.push(minUsdValue)
 
@@ -281,13 +281,13 @@ async function markContractAsAnalyzed(conn, contractID){
   }
 }
 
-async function markContractAsErrorAnalysis(conn, contractID, reset = false){
+async function markContractAsErrorAnalysis(conn, contractID, reset = false, error = ''){
   let query = reset ?
-    "UPDATE slither_analysis set `failedAnalysis` = 0 WHERE contract = ?"
+    "UPDATE slither_analysis set `failedAnalysis` = 0, `error` = ? WHERE contract = ?"
     :
-    "UPDATE slither_analysis set `failedAnalysis` = `failedAnalysis` + 1 WHERE contract = ?"
+    "UPDATE slither_analysis set `failedAnalysis` = `failedAnalysis` + 1, `error` = ? WHERE contract = ?"
   try{
-    let [data, fields] = await conn.query(query, contractID);
+    let [data, fields] = await conn.query(query, [error, contractID]);
     if(!data.affectedRows){
       Utils.printQueryError(query, contractID, "Error updating failedAnalysis")
       return false
@@ -437,9 +437,23 @@ async function pushAddressesToPool(conn, chain, addressesList){
         await Utils.sleep(200)
       }
     }
+    else{
+      await updateLastTx(conn, chain, addr)
+    }
   }
   console.log(inserted + " of " + addressesList.length + " new contracts added to db")
 }
+
+async function updateLastTx(conn, chain, address){
+  let query = "UPDATE contract SET lastTx = NOW() WHERE chain = ? AND address = ?"
+  try{
+    let [data, fields] = await conn.query(query, [chain, address]);
+  }
+  catch(e){
+    Utils.printQueryError(query, [chain, address], "Error updating lastTx - " + e.message)
+  }
+}
+
 
 async function pushAddressToParsedTable(conn, chain, address){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()

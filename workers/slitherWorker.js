@@ -8,7 +8,7 @@ runAnalysis()
 async function runAnalysis(){
   //setTimeout(() => { console.log("######## WORKER KILLED"); process.exit() }, 20000)
   let startTime = Date.now()
-  let slitherOutput = await executeSlither(workerData.folderpath, workerData.detectors)
+  let slitherOutput = await executeSlither(workerData.workingPath, workerData.analysisPath, workerData.detectors)
   let slitherResult = inspectSlitherOutput(slitherOutput, workerData.detectors)
   console.log(slitherResult)
   let elapsed = Date.now() - startTime
@@ -17,10 +17,10 @@ async function runAnalysis(){
   process.exit()
 }
 
-function executeSlither(folderpath, detectors){
-  let slitherParams = ['-m', 'slither.__main__', folderpath, '--checklist', '--detect', detectors.join(","), '--json', '-']
+function executeSlither(workingPath, analysisPath, detectors){
+  let slitherParams = ['-m', 'slither.__main__', analysisPath, '--checklist', '--detect', detectors.join(","), '--json', '-', '--solc', workerData.solcpath]
   // run slither
-  const slitherProg = spawnSync('python3', slitherParams); 
+  const slitherProg = spawnSync('python3', slitherParams, {cwd: workingPath}); 
   let out = slitherProg.stdout.toString()
   return JSON.parse(out)
 }

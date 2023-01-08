@@ -6,8 +6,7 @@ const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');
 const Detectors = require('../data/slither_detectors');
 
-// one more breaking change (override) at 0.8.12
-const solcHighestVer = {'0.4': '0.4.26', '0.5': '0.5.17', '0.6': '0.6.12', '0.7': '0.7.6', '0.8.11': '0.8.11', '0.8': '0.8.17'}
+
 const slitherInstances = process.env.SLITHER_INSTANCES
 const poolSize = slitherInstances * 100
 let mysqlConn
@@ -15,20 +14,18 @@ let filling = false // concurrency lock pool fill
 let contractPool = []
 let analyzedCounter = 0
 let failedCounter = 0
-let detectorsOfInterest, chain, minUsdValue, compilerVersionInt
+let detectorsOfInterest, chain, minUsdValue
 let endOfResults = false
 let activeWorkers = 0
 
 launchAnalysis()
 
-async function launchAnalysis(_chain, _minUsdValue, _compilerVersion){ 
+async function launchAnalysis(_chain, _minUsdValue){ 
   mysqlConn = await mysql.getDBConnection()
   detectorsOfInterest = await getActiveDetectors()
   chain = _chain || 'all'
   minUsdValue = _minUsdValue || 0
-  compilerVersionInt = _compilerVersion || '0.8'
 
-  await selectSolcVersion()
   await fillPool()
   createAnalysisFolder()
   for(let i=0; i < slitherInstances; i++){
@@ -36,14 +33,6 @@ async function launchAnalysis(_chain, _minUsdValue, _compilerVersion){
     activeWorkers++
     await Utils.sleep(100)
   }
-}
-
-async function selectSolcVersion(){
-  let solcLatest = solcHighestVer[compilerVersionInt]
-  let solc_selectParams = ['-m', 'solc_select.__main__', 'use', solcLatest] // solc_elect/__main__.py had to be modified 
-  const solc_selectProg = spawnSync('python3', solc_selectParams); 
-  let out = solc_selectProg.stdout.toString()
-  console.log(out)
 }
 
 async function createAnalysisFolder(){ // buffer to write .sol file to feed slither
@@ -71,9 +60,22 @@ async function getActiveDetectors(){
 async function launchWorker(){
   analyzedCounter++
   let contract = await contractPool.pop()
+  let solcPath = getSolcPath(contract.files[0].compilerVersion)
   console.log("#" + contract.ID + " start - " + failedCounter + "/" + analyzedCounter + " failed")
   let folderpath = preparePath(contract.files)
-  _launchWorker(contract, folderpath)
+  _launchWorker(contract, folderpath, solcPath)
+}
+
+function getSolcPath(compVer){
+  let solcVer = compVer.split("+")[0].substring(1)
+  let solcFiles = fs.readdirSync("./solc-bin/windows-amd64")
+  //solc-windows-amd64-v0.4.7+commit.822622cf.exe
+  for(let f of solcFiles){
+    let fVer = f.split("+")[0].substring("solc-windows-amd64-v".length)
+    if(fVer == solcVer)
+      return path.resolve("./solc-bin/windows-amd64/" + f)
+  }
+  return null
 }
 
 async function workerCleanup(toClean){
@@ -84,9 +86,10 @@ async function workerCleanup(toClean){
   else{
     failedCounter++
     console.log("Analysis of contract ID=" + toClean.contractID + " resulted in an ERROR:", toClean?.output?.error)
-    await mysql.markContractAsErrorAnalysis(mysqlConn, toClean.contractID)
+    let _error = parseAnalysisError(toClean?.output?.error)
+    await mysql.markContractAsErrorAnalysis(mysqlConn, toClean.contractID, false, _error)
   }
-  await Utils.deleteFolder(toClean.folderpath)
+  await Utils.deleteFolder(toClean.folderpath.workingPath)
   if(!contractPool.length){
     if(endOfResults){
       if(activeWorkers == 1)
@@ -99,12 +102,29 @@ async function workerCleanup(toClean){
   launchWorker()
 }
 
-function _launchWorker(contract, folderpath){
+function parseAnalysisError(err){
+  if(!err) return "null"
+  let knownErrors = [
+    {extract: "Source file requires different compiler version", code: "COMPILER_VERSION"},
+    {extract: "Invalid solc compilation Compiler error: Stack too deep.", code: "STACK_TOO_DEEP"},
+    {extract: "Python310\\site-packages\\slither\\detectors\\custom\\", code: "CUSTOM_DETECTOR_FAIL"},
+    {extract: "crytic_compile.platform.exceptions.InvalidCompilation", code: "INVALID_COMPILATION"},
+  ]
+  for(let ke of knownErrors)
+    if(err.includes(ke.extract))
+      return ke.code
+  return err
+  
+}
+
+function _launchWorker(contract, folderpath, solcpath){
   let _toClean = {folderpath: folderpath, contractID: contract.ID}
   let w = new Worker('./workers/slitherWorker.js', { 
     workerData: { 
-      folderpath: path.join(folderpath, '.'), 
-      detectors: contract.detectors
+      workingPath: folderpath.workingPath, 
+      analysisPath: folderpath.analysisPath, 
+      detectors: contract.detectors,
+      solcpath: solcpath
     }
   })
   w.on('error', (err) => { console.log(err.message); });
@@ -120,7 +140,7 @@ function _launchWorker(contract, folderpath){
 
 async function fillPool(){
   filling = true
-  let newPool = await mysql.getBatchToAnalyze(mysqlConn, poolSize, chain, minUsdValue, compilerVersionInt, detectorsOfInterest)
+  let newPool = await mysql.getBatchToAnalyze(mysqlConn, poolSize, chain, minUsdValue, detectorsOfInterest)
   endOfResults = newPool.eor
   contractPool.length = 0
   for(let c of newPool.data)
@@ -129,31 +149,84 @@ async function fillPool(){
 }
 
 function preparePath(files){
-  let foldername, folderpath
+  let foldername, folderpath, folders = new Set(), analysisDir = '.'
   do{
     foldername = Utils.makeid(15)
     folderpath = path.join("tmp_analysis", foldername)
   }while(fs.existsSync(folderpath))
   fs.mkdirSync(folderpath)
-  for(let f of files)
-    fs.writeFileSync(path.join(folderpath, f.filename), fixPragma(f.sourceText), {flag: 'w'});
-  return folderpath
+  for(let f of files){
+    let writePath = path.join(folderpath, f.filename)
+
+    // clean leading '/'
+    if(f.filename.substring(0,1) == '/') f.filename = f.filename.substring(1)
+
+    let struct = f.filename.split("/")
+    let outpath = folderpath
+    if(struct.length > 1){
+      // add all layers folders
+      for(let j=0; j< struct.length - 1; j++)
+        folders.add(struct.slice(0, j+1).join("/"))
+      outpath = f.filename.substring(0, f.filename.length - struct[struct.length - 1].length - 1)
+      outpath = path.join(folderpath, outpath)
+      fs.mkdirSync(outpath, { recursive: true });
+      writePath = path.join(outpath, struct[struct.length - 1])
+    }
+    fs.writeFileSync(writePath, fixPragma(f.sourceText, f.compilerVersion), {flag: 'w+'});
+  }
+  folders = Array.from(folders)
+  folders.sort(function(a, b) { // inspect higher level first
+    return (a.match(/\//g) || []).length - (b.match(/\//g) || []).length
+  })
+  if(folders.length){
+    // find the master contract folder and append it to folderpath
+    analysisDir = getMasterFolder(folders)
+    if(!analysisDir.length){
+      console.log("WARNING - can't find master folder") 
+      analysisDir = "." // will throw an error at analysis time
+    }
+  }
+  return {workingPath: folderpath, analysisPath: analysisDir}
 }
 
+function getMasterFolder(folders){
+  const patterns = ["contracts", "deploy", "src"]
+  // exact match
+  for(let patt of patterns){
+    for(let folder of folders){
+      let folderName = folder.split("/").at(-1)
+      if(folderName.substring(0, patt.length) == patt)
+        return folder
+    }
+  }
+  // partial match
+  for(let patt of patterns){
+    for(let folder of folders){
+      let folderName = folder.split("/").at(-1)
+      if(folderName.includes(patt))
+        return folder
+    }
+  }
+  return ""
+}
 
-// NOTE: this function stays here (inefficient, once per analysis) bc im not sure about the side effects (might mess up other cases) so i dont want to make the db dirty (imports cleaning instead is on sourceGetter side) #WIP
-function fixPragma(source){ // replaces pragma x with pragma ^x to solve compilation errors by slither. pre fail rate = 0.2 post fail rate= 0.13
+// replace the current pragma line with the compiler version used to verify the source code
+// don't ask me why, even used the same compiler version used by etherscan/bscscan/polygonscan, I still have solc versions compilation issues around
+function fixPragma(source, compilerVer){ 
   const pragma_patt = "pragma solidity "
   let processed = ''
   let lines = source.split("\n")
   for(let line of lines){
     let lineClean = line.trim().toLowerCase()
     if(lineClean.substring(0, pragma_patt.length) == pragma_patt){
-      // identify 0.X and replace with >0.X.0 - the compile with last version of solc 0.X
-      let ver = lineClean.substring(pragma_patt.length).replaceAll(">","").replaceAll(">","").replaceAll("=","").replaceAll(";","").replaceAll("^","").trim()
-      if(ver.includes(" "))
-        ver = ver.split(" ")[0]
-      line = pragma_patt + '>=' + ver + ';'
+      try{
+        let ver = compilerVer.split("+")[0].substring(1)
+        line = pragma_patt + '>=' + ver + ';'
+      }
+      catch(e){ 
+        console.log("WARNING Error processing pragma line in fixPragma")
+        continue;
+      }
     }
     processed += line + "\n"
   }

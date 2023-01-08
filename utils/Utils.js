@@ -86,7 +86,7 @@ class Utils {
   static cleanImports(source){
     let cleanedSource = ''
     let import_patt = 'import '
-    let breakChars = ["'", "\"", "\\", "/"]
+    let breakChars = ["'", "\"", "\\", "/", '"', ' ']
     let lines = source.split('\n')
     for(let l of lines){
       if(Utils.pattMatch(l, import_patt)){
@@ -98,7 +98,13 @@ class Utils {
             break
           fileName = l.charAt(i) + fileName
         }
-        cleanedSource += 'import "./' + fileName + '";\n'
+        if(l.includes(' from ')){
+          let pre = l.split(" from ")[0]
+          cleanedSource += pre + ' from "./' + fileName + '";\n'
+        }
+        else{
+          cleanedSource += 'import "./' + fileName + '";\n'
+        }
       }
       else
       cleanedSource += l + '\n'

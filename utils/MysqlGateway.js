@@ -1,39 +1,6 @@
 const Database = require('./DB');
 const Utils = require('./Utils');
 
-async function getSiblingsSourceFiles(conn, sourceFileID){ 
-  let contract = getRandomContractFromSourceFile(conn, sourceFileID) // important to try multiple contracts in case of compilation failure. Had to move it out of the query since RAND() fucks up performance
-  let query = "SELECT csf.filename, sf.sourceText, sa.* FROM `sourcefile` AS sf INNER JOIN slither_analysis AS sa ON sa.sourcefile = sf.ID INNER JOIN contract_sourcefile AS csf ON csf.sourcefile = sf.ID AND csf.contract = ?;"
-  try{
-    let [data, fields] = await conn.query(query, contract)
-    if(!data.length){
-      console.log("ERROR - Can't get siblings source files")
-      return null
-    }
-    return data
-  }
-  catch(e){
-    console.log("ERROR - Can't get siblings source files", e.message)
-    return null
-  }
-}
-
-async function getRandomContractFromSourceFile(conn, sourceFileID){ 
-  let query = "SELECT contract FROM contract_sourcefile WHERE sourcefile = ? LIMIT 100;"
-  try{
-    let [data, fields] = await conn.query(query, sourceFileID)
-    if(!data.length){
-      console.log("ERROR - Can't get random contract from source file")
-      return null
-    }
-    return data.length == 1 ? data[0] : data[Math.round(Math.random * (data.length - 1))]
-  }
-  catch(e){
-    console.log("ERROR - Can't get random contract from source file", e.message)
-    return null
-  }
-}
-
 async function addSlitherAnalysisColumns(conn, columnName){
   let query = "ALTER TABLE slither_analysis ADD COLUMN ? TINYINT DEFAULT -1;"
   try{
@@ -534,4 +501,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {getSiblingsSourceFiles, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

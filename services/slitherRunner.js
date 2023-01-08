@@ -103,7 +103,7 @@ async function workerCleanup(toClean){
 }
 
 function parseAnalysisError(err){
-  if(!err) return "null"
+  if(!err) return "NO_ERROR_MESSAGE"
   let knownErrors = [
     {extract: "Source file requires different compiler version", code: "COMPILER_VERSION"},
     {extract: "Invalid solc compilation Compiler error: Stack too deep.", code: "STACK_TOO_DEEP"},
@@ -113,7 +113,7 @@ function parseAnalysisError(err){
   for(let ke of knownErrors)
     if(err.includes(ke.extract))
       return ke.code
-  return err
+  return "UNCATEGORIZED_ERROR"
   
 }
 

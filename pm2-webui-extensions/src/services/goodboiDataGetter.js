@@ -1,5 +1,5 @@
 const mysql = require('../utils/goodboiMysql')
-const shell = require('shelljs');
+const { listApps} = require('../providers/pm2/api')
 
 const getGoodBoiData = async () => {
   let mysqlConn = await mysql.getDBConnection()
@@ -55,39 +55,22 @@ async function getContractsInfo(mysqlConn){
 
 async function getModulesStatus(mysqlConn){
   let statusOut = {}
-  let pm2Out = await getPm2ActiveProcesses()
-  if(pm2Out.exitcode != 0){
-    console.log("ERROR - Can't run 'pm2 ls'")
-    return {}
-  }
-  let lines = pm2Out.output.split("\n")
-  let fields = lines[1].split("│").map(e => e.trim()).filter(e => e.length)
-  let parsedStatus = []
-  for(let i = 3; i< lines.length - 2; i++){
-    if(!lines[i].trim().length) continue // skip empty lines
-    let moduleObj = {}
-    let f = lines[i].split("│").map(e => e.trim()).filter(e => e.length)
-    for(let k=0; k<fields.length; k++){
-      moduleObj[fields[k]] = f[k]
-    }
-    parsedStatus.push(moduleObj)
-  }
+  let apps = await listApps()
   let modules = ["sourceGetter", "balanceGetter", "blockParser"]
   let chains = ["eth_mainnet", "bsc_mainnet", "polygon"]
   for(let m of modules){
     for(let c of chains){
       let moduleName = m + "_" + c
-      let status = getModuleStatus(parsedStatus, moduleName)
+      let status = getModuleStatus(apps, moduleName)
       statusOut[moduleName] = status
     }
   }
   
   // get mysqlBackup status
-  statusOut['mysqlBackup'] = getModuleStatus(parsedStatus, 'mysqlBackup')
+  statusOut['mysqlBackup'] = getModuleStatus(apps, 'mysqlBackup')
   statusOut['contractsPruner'] = false
 
   await mysql.updateCache(mysqlConn, "MODULES_STATUS", JSON.stringify(statusOut))
-
   return statusOut
 }
 

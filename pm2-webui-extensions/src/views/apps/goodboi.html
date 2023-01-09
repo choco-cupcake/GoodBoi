@@ -464,7 +464,7 @@ function clearFindingsTable() {
 }
 
 // Example data for testing purposes
-const data = JSON.parse('<%= UIdata %>'.replaceAll("&#34;", '"')) //TODO fix update functions, add update setter services, ass cache, push to worker, set edit folder into goodboi
+const data = JSON.parse('<%= UIdata %>'.replaceAll("&#34;", '"')) 
 
 // Update UI with example data
 updateStatus('bschain', 'block-parser', data.modulesStatus.blockParser_bsc_mainnet);

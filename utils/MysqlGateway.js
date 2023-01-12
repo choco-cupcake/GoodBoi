@@ -174,7 +174,7 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
   let endOfResults = false
   let limit = (len * 5) // 5 files per contract on avg
   let detSub = buildDetectorsFindSubquery(detectors)
-  let query = ''.concat("SELECT DISTINCT c.compilerVersion, csf.contract, csf.filename, sf.*, an.* FROM contract AS c ",  
+  let query = ''.concat("SELECT DISTINCT c.sourcefile_signature, c.compilerVersion, csf.contract, csf.filename, sf.*, an.* FROM contract AS c ",  
             "INNER JOIN contract_sourcefile AS csf ON csf.contract = c.ID ",
             "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
             minUsdValue != 0 ? "INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address " : "",
@@ -207,15 +207,19 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
     let contracts = []
     for(let d of data) // group files by contract
       if(!contracts.includes(d.contract)) 
-        contracts.push(d.contract)
+        contracts.push({ID: d.contract, sourcefile_signature: d.sourcefile_signature})
     let returnData = []
+    let signaturesSeen = [] // remove duplicates - sorry not sorry the proper sql query was too demanding + could be unpleasant only the first few cycles of a new detector + its late i want to play with custom detectors + first tests suggest its better that anticipated
     for(let c of contracts){
+      if(signaturesSeen.includes(c.sourcefile_signature))
+        continue
+      signaturesSeen.push(c.sourcefile_signature)
       // get files
-      let files = data.filter(e => e.contract == c)
+      let files = data.filter(e => e.contract == c.ID)
       // exclude already run detectors
       let usedDetectors = Object.keys(files[0]).filter(e => !['contract', 'filename',  'ID',  'sourceText',  'sourceHash',  'failedAnalysis',  'report'].includes(e) && files[0][e] != '-1')
       let detectorsToUse = detectors.filter(e => !usedDetectors.includes(e)) // detectors set by the user - detectors already run on this contract
-      returnData.push({ID: c, files: files, detectors: detectorsToUse})
+      returnData.push({ID: c.ID, files: files, detectors: detectorsToUse, sourcefile_signature: c.sourcefile_signature})
 
     }
     return {eor: endOfResults, data: returnData}
@@ -249,39 +253,39 @@ async function markContractAsAnalyzed(conn, contractID){
   }
 }
 
-async function markContractAsErrorAnalysis(conn, contractID, reset = false, error = ''){
+async function markContractAsErrorAnalysis(conn, sourcefile_signature, reset = false, error = ''){
   let query = reset ?
-    "UPDATE slither_analysis set `failedAnalysis` = 0, `error` = ? WHERE contract = ?"
+    "UPDATE slither_analysis AS an INNER JOIN contract AS c ON an.contract = c.ID SET an.failedAnalysis = 0, an.error = ? WHERE sourcefile_signature = ?"
     :
-    "UPDATE slither_analysis set `failedAnalysis` = `failedAnalysis` + 1, `error` = ? WHERE contract = ?"
+    "UPDATE slither_analysis AS an INNER JOIN contract AS c ON an.contract = c.ID SET an.failedAnalysis = an.failedAnalysis + 1, an.error = ? WHERE c.sourcefile_signature = ?"
   try{
-    let [data, fields] = await conn.query(query, [error, contractID]);
+    let [data, fields] = await conn.query(query, [error, sourcefile_signature]);
     if(!data.affectedRows){
-      Utils.printQueryError(query, contractID, "Error updating failedAnalysis")
+      Utils.printQueryError(query, sourcefile_signature, "Error updating failedAnalysis")
       return false
     }
     return true
   }
   catch(e){
-    Utils.printQueryError(query, contractID, "Error updating failedAnalysis - " + e.message)
+    Utils.printQueryError(query, sourcefile_signature, "Error updating failedAnalysis - " + e.message)
     return false
   }
 }
 
 
-async function insertFindingsToDB(conn, contractID, output){ 
+async function insertFindingsToDB(conn, sourcefile_signature, output){ 
   // try to update the existing record, insert if update fails 
-  let query = "UPDATE slither_analysis SET " + buildFindingsUpdateSubquery(output) + ", analysisDate = NOW()  WHERE contract = ?"
+  let query = "UPDATE slither_analysis AS an INNER JOIN contract AS c ON an.contract = c.ID SET " + buildFindingsUpdateSubquery(output) + ", an.analysisDate = NOW() WHERE c.sourcefile_signature = ?"
   try{
-    let [data, fields] = await conn.query(query, [output.report, contractID]);
+    let [data, fields] = await conn.query(query, [output.report, sourcefile_signature]);
     if(!data.affectedRows){ 
       Utils.printQueryError(query, [contractID, output.findings], "Error updating analysis record - 0 affected rows")
     }
-    await markContractAsErrorAnalysis(conn, contractID, true) // reset failedAnalysis to 0
+    await markContractAsErrorAnalysis(conn, sourcefile_signature, true) // reset failedAnalysis to 0
     return true
   }
   catch(e){
-    Utils.printQueryError(query, [contractID, output.findings], "Error updating analysis record - " + e.message)
+    Utils.printQueryError(query, [sourcefile_signature, output.findings], "Error updating analysis record - " + e.message)
     return false
   }
 }
@@ -289,8 +293,8 @@ async function insertFindingsToDB(conn, contractID, output){
 function buildFindingsUpdateSubquery(output){
   let ret = []
   for(let k of Object.keys(output.findings))
-    ret.push("`" + k + "` = " + output.findings[k])
-  ret.push("`report` = ?")
+    ret.push("an.`" + k + "` = " + output.findings[k])
+  ret.push("an.report = ?")
   return ret.join(", ")
 }
 

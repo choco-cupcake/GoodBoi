@@ -81,13 +81,13 @@ function getSolcPath(compVer){
 async function workerCleanup(toClean){
   if(toClean?.output?.success){
     console.log("Analysis of contract ID=" + toClean.contractID + " successfully finished")
-    await mysql.insertFindingsToDB(mysqlConn, toClean.contractID, toClean.output)
+    await mysql.insertFindingsToDB(mysqlConn, toClean.sourcefile_signature, toClean.output)
   }
   else{
     failedCounter++
     console.log("Analysis of contract ID=" + toClean.contractID + " resulted in an ERROR:", toClean?.output?.error)
     let _error = parseAnalysisError(toClean?.output?.error)
-    await mysql.markContractAsErrorAnalysis(mysqlConn, toClean.contractID, false, _error)
+    await mysql.markContractAsErrorAnalysis(mysqlConn, toClean.sourcefile_signature, false, _error)
   }
   await Utils.deleteFolder(toClean.folderpath.workingPath)
   if(!contractPool.length){
@@ -118,7 +118,7 @@ function parseAnalysisError(err){
 }
 
 function _launchWorker(contract, folderpath, solcpath){
-  let _toClean = {folderpath: folderpath, contractID: contract.ID}
+  let _toClean = {folderpath: folderpath, contractID: contract.ID, sourcefile_signature: contract.sourcefile_signature}
   let w = new Worker('./workers/slitherWorker.js', { 
     workerData: { 
       workingPath: folderpath.workingPath, 

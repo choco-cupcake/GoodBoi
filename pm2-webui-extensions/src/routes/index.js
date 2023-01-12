@@ -45,7 +45,7 @@ router.get('/apps', isAuthenticated, async (ctx) => {
 });
 
 router.get('/goodboi', async (ctx) => {
-    let UIdata = await getGoodBoiData()
+    const UIdata = await getGoodBoiData()
     return await ctx.render('apps/goodboi', {
         UIdata: UIdata
     });

@@ -15,6 +15,7 @@
     "bignumber.js": "^9.1.0",
     "bluebird": "^3.7.2",
     "config": "^3.3.8",
+    "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
     "ethers": "^5.7.2",
     "glob-promise": "^5.0.0",

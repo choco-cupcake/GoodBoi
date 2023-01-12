@@ -328,7 +328,7 @@ li{
             <th style="width:35%" scope="col">Detector name</th>
             <th style="width:20%" scope="col">Hits</th>
             <th style="width:25%" scope="col">Analyzed contracts</th>
-            <th style="width:20%" scope="col">Action</th>
+            <th style="width:20%" scope="col" class="text-right">Action</th>
           </tr>
         </thead>
         <tbody id="findings-table-body">
@@ -448,7 +448,7 @@ function addFinding(detectorName, hits, analyzedContracts) {
 
   const tdAction = document.createElement('td');
   const button = document.createElement('button');
-  button.classList.add('btn', 'btn-primary');
+  button.classList.add('btn', 'btn-primary', 'float-right');
   button.textContent = 'Inspect Hits';
   tdAction.appendChild(button);
   tr.appendChild(tdAction);

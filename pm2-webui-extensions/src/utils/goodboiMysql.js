@@ -112,7 +112,7 @@ async function getContractsPerChain(conn){
 }
 
 async function getSlitherAnalysisColumns(conn){
-  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis' AND `COLUMN_NAME` NOT IN ('ID', 'report', 'failedAnalysis', 'error', 'contract');"
+  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis' AND `COLUMN_NAME` NOT IN ('ID', 'report', 'failedAnalysis', 'error', 'contract','analysisDate');"
   try{
     let [data, fields] = await conn.query(query)
     if(!data.length){

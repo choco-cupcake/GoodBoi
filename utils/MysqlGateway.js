@@ -1,10 +1,11 @@
-const Database = require('./DB');
-const Utils = require('./Utils');
+const Database = require('./DB')
+const Utils = require('./Utils')
+const Crypto = require('crypto')
 
 async function addSlitherAnalysisColumns(conn, columnName){
-  let query = "ALTER TABLE slither_analysis ADD COLUMN ? TINYINT DEFAULT -1;"
+  let query = "ALTER TABLE slither_analysis ADD COLUMN `" + columnName + "` TINYINT DEFAULT -1 AFTER failedAnalysis;"
   try{
-    await conn.query(query, columnName);
+    await conn.query(query);
     return true
   }
   catch(e){
@@ -270,7 +271,7 @@ async function markContractAsErrorAnalysis(conn, contractID, reset = false, erro
 
 async function insertFindingsToDB(conn, contractID, output){ 
   // try to update the existing record, insert if update fails 
-  let query = "UPDATE slither_analysis SET " + buildFindingsUpdateSubquery(output) + " WHERE contract = ?"
+  let query = "UPDATE slither_analysis SET " + buildFindingsUpdateSubquery(output) + ", analysisDate = NOW()  WHERE contract = ?"
   try{
     let [data, fields] = await conn.query(query, [output.report, contractID]);
     if(!data.affectedRows){ 
@@ -336,6 +337,7 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
 
   // update source files
   let insertFileQuery 
+  let sourcefileIDs = []
   for(let f of contractObj.SourceCode){
     // compute codehash
     let sourceHash = Utils.hash(f.source)
@@ -357,9 +359,16 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
       csfID = await insertToContractSourcefile(conn, f.filename, contractID.data, sourcecodeID)
     }
     if(!csfID){
-      console.log("ERROR - could not insert new record into contract_sourcefile")
+      console.log("ERROR - could not insert new record into contract_sourcefile") // proper logging will come 
     }
+    else sourcefileIDs.push(csfID)
+
   }
+
+  // compute sourcefile_signature to analyze only once the same contract deployed multiple times with different constructor parameters. hopefully most of the times
+  let sourcefileSignature = sourcefileIDs.sort(function(a,b) { return a - b }).join("-") // separator for uniqueness
+  let hashedSignature = Crypto.createHash('sha256').update(sourcefileSignature).digest('hex') // some contracts have > 100 (up to 180) different sourcefiles
+  await updateSourcefileSignature(conn, contractID.data, hashedSignature)
 
   // create empty analysis record
   let query = "INSERT INTO slither_analysis (contract, report, error) VALUES (?, '', '')"
@@ -369,6 +378,22 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   await deleteAddressFromPool(conn, chain, contractAddress)
 
   return contractID.data
+}
+
+async function updateSourcefileSignature(conn, contractID, signature){
+  let query = "UPDATE contract SET sourcefile_signature = ? WHERE ID = ?"
+  try{
+    let [data, fields] = await conn.query(query, [signature, contractID]);
+    if(!data.affectedRows){ 
+      Utils.printQueryError(query, [signature, contractID], "Error updating sourcefile_signature. affectedRows=0")
+      return false
+    }
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, [signature, contractID], "Error updating sourcefile_signature", e.message)
+    return false
+  }
 }
 
 

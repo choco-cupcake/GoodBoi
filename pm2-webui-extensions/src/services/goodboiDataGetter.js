@@ -81,14 +81,6 @@ function getModuleStatus(parsedStatus, moduleName){
   return true
 }
 
-async function getPm2ActiveProcesses(){
-  return new Promise((resolve, reject) => {
-    shell.exec('pm2 ls', function(code, output) {
-      resolve({exitcode: code, output: output})
-    });
-  })
-}
-
 
 module.exports = {
   getGoodBoiData

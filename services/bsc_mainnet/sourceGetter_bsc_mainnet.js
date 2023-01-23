@@ -138,6 +138,7 @@ function contractsToObject(source){
 		let fileSource = cleanVerificationDateHeader(root[k].content)
 		if(!duplicatedNames){
 			fileName = k.split("/").at(-1) // only keep filename
+			fileName = Utils.cleanWeirdChars(fileName)
 			fileSource = Utils.cleanImports(fileSource) // clean imports from path in source
 		}
 		filesList.push({filename: fileName, source: fileSource})

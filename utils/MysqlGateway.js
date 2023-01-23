@@ -377,11 +377,15 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   // create empty analysis record
   let query = "INSERT INTO slither_analysis (contract, report, error) VALUES (?, '', '')"
   await performInsertQuery(conn, query, contractID.data)
+  // await insertAnalysisRecord(conn, contractID.data, hashedSignature)
 
   // remove address from addresspool
   await deleteAddressFromPool(conn, chain, contractAddress)
-
   return contractID.data
+}
+
+async function insertAnalysisRecord(conn, contractID, hashedSignature){
+//TODO
 }
 
 async function updateSourcefileSignature(conn, contractID, signature){
@@ -524,10 +528,125 @@ async function performInsertQuery(conn, query, params, suppressError = false, is
     return {data: null, error: e.code}
   }
 }
+/**
+ * 
+ * Verified Getters
+ */
 
+async function updateLastParsedAddress(conn, chain, address){
+  let field = 'lastParsedAddress_' + chain.toLowerCase()
+  let query = "UPDATE status set `" + field + "` = ? WHERE ID = 1"
+  try{
+    let [data, fields] = await conn.query(query, address);
+    if(!data.affectedRows){
+      Utils.printQueryError(query, address, "Error setting " + field)
+      return false
+    }
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, address, "Error setting " + field + " - " + e.message)
+    return false
+  }
+}
 
+async function getLastParsedAddress(conn, chain){
+  let field = 'lastParsedAddress_' + chain.toLowerCase()
+  let query = "SELECT `" + field + "` FROM status WHERE ID=1;"
+   try{
+      let [data, fields] = await conn.query(query)
+      if(!data.length){
+        console.log("WARNING - Can't get last parsed address - length = 0")
+        return null
+      }
+      return data[0][field]
+    }
+    catch(e){
+      console.log("ERROR - Can't get last parsed address", e.message)
+      return null
+    }
+}
+
+async function pushVerifiedAddressToPoolTable(conn, chain, addr){
+  let insertID = await pushAddressToParsedTable(conn, chain, addr)
+  if(insertID){ // it has been inserted in the table, it means it's new
+    let error = 1
+    while(error <= 5){
+      if(await _pushAddressToPoolTable(conn, chain, addr, 'addresspool')){
+        break
+      }
+      console.log("Error inserting addr " + addr + " to pool. Error #" + error)
+      error++
+      await Utils.sleep(200)
+    }
+  }
+}
+
+async function _pushAddressToPoolTable(conn, chain, address, table){
+  let insertQuery = "INSERT INTO " + table + " (address, chain) VALUES (?,?);"
+  let ret = (await performInsertQuery(conn, insertQuery, [address, chain]) ).data
+  return ret
+}
+
+async function pushVerifiedAddresses(conn, chain, addressesList){
+  let inserted = 0
+  let updated = 0
+  for(let addr of addressesList){
+    let prevFound = await getFromParsedPool(conn, chain, addr)
+    if(prevFound.length){
+      if(prevFound[0].verified){
+        continue
+      }
+      else{
+        setContractVerified(conn, chain, addr)
+        _pushAddressToPoolTable(conn, chain, addr, 'addresspool')
+        updated++
+      }
+    }
+    else{
+      pushVerifiedAddressToPoolTable(conn, chain, addr)
+      inserted++
+    }
+  }
+  console.log(inserted + " inserted, " + updated + " updated of " + addressesList.length + " new addresses")
+  return inserted
+}
+
+async function getFromParsedPool(conn, chain, address){
+  let parsedTable = 'parsedaddress_' + chain.toLowerCase()
+  let query = "SELECT * FROM " + parsedTable + " WHERE address = ?"
+  try{
+    let [data, fields] = await conn.query(query, address);
+    return data
+  }
+  catch(e){
+    Utils.printQueryError(query, chain, e.message)
+    return []
+  }
+}
+
+async function setContractVerified(conn, chain, address){
+  let parsedTable = 'parsedaddress_' + chain.toLowerCase()
+  let query = "UPDATE " + parsedTable + " SET verified = 1 WHERE address = ?"
+  try{
+    let [data, fields] = await conn.query(query, address);
+    if(!data.affectedRows){
+      return false
+    }
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, address, "Error setting verified=1 on lastParsedBlock_eth_mainnet - " + e.message)
+    return false
+  }
+}
+
+/**
+ * 
+ * /Verified Getters
+ */
 async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {getLastParsedAddress, updateLastParsedAddress, pushVerifiedAddresses, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

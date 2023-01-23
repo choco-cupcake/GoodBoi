@@ -4,9 +4,14 @@ const path = require('path')
 class Utils {
 
   static chains = {
-      ETH_MAINNET: "ETH_MAINNET",
-      BSC_MAINNET: "BSC_MAINNET",
-      POLYGON: "POLYGON"
+    ETH_MAINNET: "ETH_MAINNET",
+    BSC_MAINNET: "BSC_MAINNET",
+    POLYGON: "POLYGON"
+  }
+  static verifiedUrl = {
+      ETH_MAINNET: "https://etherscan.io/contractsVerified",
+      BSC_MAINNET: "https://bscscan.com/contractsVerified",
+      POLYGON: "https://polygonscan.com/contractsVerified"
     }
 
   static printQueryError(query, params, error = null){
@@ -111,6 +116,12 @@ class Utils {
     }
     return cleanedSource
   }
+
+static cleanWeirdChars(str){ // this covers only the case of a not imported contract, 
+															// where the three structure gets flattened (no filename duplicates).
+															// happened once in 800k contracts it should not impact much
+	return str.replace(/[^\x20-\x7E]/g, ""); // keeps ascii chars [32-126]
+}
 }
 
 module.exports = Utils;

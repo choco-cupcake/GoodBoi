@@ -2,27 +2,26 @@ const mysql = require('../utils/MysqlGateway')
 const Utils = require('../utils/Utils')
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const Xvfb = require('xvfb');
 require("dotenv").config()
 
 const timeout_XP = 10000
-
-// every 3 hours
-// pm2 start xvfb-run -a --server-args="-screen 0 1280x800x24 -ac -nolisten tcp -dpi 96 +extension RANDR" node services/verifiedGetter.js --cron-restart="0 */3 * * *"
-// xvfb-run -a --server-args="-screen 0 1280x800x24 -ac -nolisten tcp -dpi 96 +extension RANDR" node services/verifiedGetter.js
+// every 2 hours
+// pm2 start services/verifiedGetter.js --cron-restart="0 */2 * * *"
 
 const launchParsing = () => {
   return new Promise((resolve, reject) => {
-    let browser, page
+    let browser, page, xvfb
     let dbConn
     
     crawlEtherscan()
 
     async function crawlEtherscan(){
       dbConn = await mysql.getDBConnection()
+      await puppeteerBoot()
       for(let chain of Object.values(Utils.chains)){
         console.log("Start crawling verified contracts for chain: ", chain)
-        await puppeteerBoot()
-	await page.goto(Utils.verifiedUrl[chain])
+	      await page.goto(Utils.verifiedUrl[chain])
         await sleep(1000)
         let lastAddress = await mysql.getLastParsedAddress(dbConn, chain) // get the newest address we crawled this way - we'll stop when we find that addr
         console.log("lastAddress: ", lastAddress)
@@ -59,8 +58,9 @@ const launchParsing = () => {
       
         await sleep(100)
         console.log("Crawling done for chain: ", chain)
-        browser.close()
-	}
+	    }
+      await browser.close()
+      xvfb.stop();
       console.log("EtherScraper leaving")
       resolve("all good")
     }
@@ -108,6 +108,11 @@ const launchParsing = () => {
     
     
     async function puppeteerBoot() {
+      xvfb = new Xvfb({
+        silent: true,
+        xvfb_args: ["-screen", "0", '1280x720x24', "-ac"],
+      });
+      xvfb.start((err)=>{if (err) console.error(err)})
       puppeteer.use(StealthPlugin());
       let proxyChain = require('proxy-chain');
       let proxyUrl = "http://" + process.env.smartproxy_id + ":" + process.env.smartproxy_pwd + "@gate.smartproxy.com:7000"
@@ -119,8 +124,9 @@ const launchParsing = () => {
         args: newargs,
         executablePath: "/usr/bin/chromium-browser",        
         headless: false,
+        defaultViewport: null,
         args: [
-        '--no-sandbox', '--enable-automation', "--disabled-setupid-sandbox"
+        '--no-sandbox', '--enable-automation', "--disabled-setupid-sandbox", "--display=" + xvfb._display
         ]
 	
       }) 

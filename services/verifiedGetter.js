@@ -144,7 +144,6 @@ main()
 
 async function main(){
   await launchParsing()
-  process.exit()
 }
 
 

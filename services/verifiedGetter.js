@@ -1,13 +1,14 @@
-const mysql = require('../utils/mysqlGateway')
+const mysql = require('../utils/MysqlGateway')
 const Utils = require('../utils/Utils')
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 require("dotenv").config()
 
-const timeout_XP = 5000
+const timeout_XP = 10000
 
-// every 2 hours
-// pm2 start verifiedGetter.js --cron-restart="0 */3 * * *"
+// every 3 hours
+// pm2 start xvfb-run -a --server-args="-screen 0 1280x800x24 -ac -nolisten tcp -dpi 96 +extension RANDR" node services/verifiedGetter.js --cron-restart="0 */3 * * *"
+// xvfb-run -a --server-args="-screen 0 1280x800x24 -ac -nolisten tcp -dpi 96 +extension RANDR" node services/verifiedGetter.js
 
 const launchParsing = () => {
   return new Promise((resolve, reject) => {
@@ -18,11 +19,11 @@ const launchParsing = () => {
 
     async function crawlEtherscan(){
       dbConn = await mysql.getDBConnection()
-      await puppeteerBoot()
       for(let chain of Object.values(Utils.chains)){
         console.log("Start crawling verified contracts for chain: ", chain)
-        await page.goto(Utils.verifiedUrl[chain])
-        
+        await puppeteerBoot()
+	await page.goto(Utils.verifiedUrl[chain])
+        await sleep(1000)
         let lastAddress = await mysql.getLastParsedAddress(dbConn, chain) // get the newest address we crawled this way - we'll stop when we find that addr
         console.log("lastAddress: ", lastAddress)
         if(!lastAddress) 
@@ -58,9 +59,9 @@ const launchParsing = () => {
       
         await sleep(100)
         console.log("Crawling done for chain: ", chain)
-      }
+        browser.close()
+	}
       console.log("EtherScraper leaving")
-      browser.close()
       resolve("all good")
     }
     
@@ -79,7 +80,6 @@ const launchParsing = () => {
       if(indexLast >= 0){ 
         addresses = addresses.slice(0, indexLast) // remove already parsed addresses
       }
-      
       await page.waitForXPath(nextPageXP, {timeout: timeout_XP}); // check if this is the last page
       let nextPDis = await page.$x(lastPageDisabledXP);
       if(nextPDis.length) 
@@ -117,16 +117,12 @@ const launchParsing = () => {
       newargs.push('--proxy-server=' + newProxyUrl);
       browser = await puppeteer.launch({
         args: newargs,
-        executablePath: "./utils/chrome-win/chrome.exe",
+        executablePath: "/usr/bin/chromium-browser",        
         headless: false,
         args: [
-        '--enable-automation',
-        `--window-size=820,680`
-        ],
-          defaultViewport: {
-            width:820,
-            height:680
-          }
+        '--no-sandbox', '--enable-automation', "--disabled-setupid-sandbox"
+        ]
+	
       }) 
       page = await browser.newPage();
       await page.setExtraHTTPHeaders({

@@ -430,7 +430,7 @@ async function pushAddressesToPool(conn, chain, addressesList){
   for(let addr of addressesList){
     let prevInsert =  await getFromParsedPool(conn, chain, addr)
     if(!prevInsert.length || prevInsert[0].toRefresh == true){
-      await pushAddressToPoolTable(conn, chain, addr, 'addresspool')
+      await pushAddressToPoolTable(conn, chain, addr, 'addresspool', true) // mute errors for (addr,chain) already in addresspool - in case of system stuck for a while ad addresspool full of stuff
       inserted++
       if(!prevInsert.length){
         await pushAddressToParsedTable(conn, chain, addr)
@@ -461,9 +461,9 @@ async function pushAddressToParsedTable(conn, chain, address){
   return (await performInsertQuery(conn, insertQuery, [address], true, true)).data 
 }
 
-async function pushAddressToPoolTable(conn, chain, address, table){
+async function pushAddressToPoolTable(conn, chain, address, table, muteErrors=false){
   let insertQuery = "INSERT INTO " + table + " (address, chain) VALUES (?,?);"
-  let ret = (await performInsertQuery(conn, insertQuery, [address, chain]) ).data
+  let ret = (await performInsertQuery(conn, insertQuery, [address, chain], muteErrors) ).data
   return ret
 }
 
@@ -531,9 +531,11 @@ async function performInsertQuery(conn, query, params, suppressError = false, is
 
 async function getFromParsedPool(conn, chain, address){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
-  let query = "SELECT *, (verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() ) as toRefresh, verified FROM " + parsedTable + " WHERE address = ?"
+  let toRefreshSubQuery = process.env.UNVERIFIED_RECHECK_ENABLED == 1 ? "(verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() )" : "'0'"
+  let query = "SELECT *, " + toRefreshSubQuery + " as toRefresh, verified FROM " + parsedTable + " WHERE address = ?"
+  let queryParams = process.env.UNVERIFIED_RECHECK_ENABLED == 1 ? [process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS, address] : [address]
   try{
-    let [data, fields] = await conn.query(query, [process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS, address]);
+    let [data, fields] = await conn.query(query, queryParams);
     return data
   }
   catch(e){

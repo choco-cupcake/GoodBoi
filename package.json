@@ -4,7 +4,7 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "startall": "pm2 start services/eth_mainnet/blockParser_eth_mainnet.js --cron-restart=\"0 */12 * * *\" && pm2 start services/bsc_mainnet/blockParser_bsc_mainnet.js --cron-restart=\"0 */12 * * *\" && pm2 start services/polygon/blockParser_polygon.js --cron-restart=\"0 */12 * * *\" && pm2 start services/eth_mainnet/sourceGetter_eth_mainnet.js --cron-restart=\"0 */12 * * *\" && pm2 start services/bsc_mainnet/sourceGetter_bsc_mainnet.js --cron-restart=\"0 */12 * * *\" && pm2 start services/polygon/sourceGetter_polygon.js --cron-restart=\"0 */12 * * *\" && pm2 start services/eth_mainnet/balanceGetter_eth_mainnet.js --cron-restart=\"0 * */5 * *\" && pm2 start services/bsc_mainnet/balanceGetter_bsc_mainnet.js --cron-restart=\"0 * */5 * *\" && pm2 start services/polygon/balanceGetter_polygon.js --cron-restart=\"0 * */5 * *\" && pm2 start services/mysqlBackup.js --cron-restart=\"0 * */3 * *\""
   },
   "author": "",
   "license": "ISC",

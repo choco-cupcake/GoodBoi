@@ -45,7 +45,7 @@ async function getDetectorHitCount(conn, detector, value){
 }
 
 async function getCompilationErrors(conn){
-  let query = "SELECT an.error, COUNT(an.error) AS count FROM contract AS c INNER JOIN slither_analysis AS an ON c.ID = an.contract WHERE an.failedAnalysis > 0 GROUP BY an.error;"
+  let query = "SELECT an.error, COUNT(an.error) AS count FROM contract AS c INNER JOIN slither_analysis AS an ON c.sourcefile_signature = an.sourcefile_signature WHERE an.failedAnalysis > 0 GROUP BY an.error;"
   try{
     let [data, fields] = await conn.query(query)
     if(!data.length){
@@ -112,7 +112,7 @@ async function getContractsPerChain(conn){
 }
 
 async function getSlitherAnalysisColumns(conn){
-  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis' AND `COLUMN_NAME` NOT IN ('ID', 'report', 'failedAnalysis', 'error', 'contract','analysisDate');"
+  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis' AND `COLUMN_NAME` NOT IN ('ID', 'report', 'failedAnalysis', 'error', 'sourcefile_signature','analysisDate');"
   try{
     let [data, fields] = await conn.query(query)
     if(!data.length){

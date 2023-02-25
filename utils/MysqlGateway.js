@@ -15,7 +15,7 @@ async function addSlitherAnalysisColumns(conn, columnName){
 }
 
 async function getSlitherAnalysisColumns(conn){
-  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis';"
+  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis' AND `COLUMN_NAME` NOT IN ('ID','sourcefile_signature','failedAnalysis','report','error','analysisDate');"
   try{
     let [data, fields] = await conn.query(query)
     if(!data.length){
@@ -172,19 +172,23 @@ async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
 async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
 // analysis table analyzes sourcefile, not contract. results viewer will get related contracts
   let endOfResults = false
-  let limit = (len * 5) // 5 files per contract on avg
   let detSub = buildDetectorsFindSubquery(detectors)
-  let query = ''.concat("SELECT DISTINCT c.sourcefile_signature, c.compilerVersion, csf.contract, csf.filename, sf.*, an.* FROM contract AS c ",  
-            "INNER JOIN contract_sourcefile AS csf ON csf.contract = c.ID ",
-            "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
-            minUsdValue != 0 ? "INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address " : "",
-            "LEFT JOIN slither_analysis AS an ON an.contract = c.ID ",
-            "WHERE an.failedAnalysis = 0 ",
-            chain != 'all' ? "AND c.chain = ? " : "",
-            minUsdValue != 0 ? "AND b.usdValue >= ? " : "",
-            detSub,  // keeps only contracts not yet analyzed for these detectors
-            "LIMIT ", limit)
-  console.log(query)
+  let query = ''.concat(
+    "SELECT DISTINCT c.sourcefile_signature, c.compilerVersion, csf.contract, csf.filename, sf.*, an.* FROM contract AS c ",
+    "INNER JOIN contract_sourcefile AS csf ON csf.contract = c.ID ",
+    "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
+    "INNER JOIN slither_analysis AS an ON an.sourcefile_signature = c.sourcefile_signature ",
+    "INNER JOIN ( ",
+    "  SELECT DISTINCT c.sourcefile_signature FROM contract AS c ",
+    minUsdValue != 0 ? "  INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address " : "",
+    "  INNER JOIN slither_analysis AS an ON an.sourcefile_signature = c.sourcefile_signature ",
+    chain != 'all' ? "  WHERE c.chain = 'POLYGON' " : "",
+    minUsdValue != 0 ? "  AND b.usdValue >= 0 " : "",
+    "  AND an.failedAnalysis = 0 ",
+    detSub, // keeps only contracts not yet analyzed for these detectors
+    "  LIMIT " + len,
+    ") AS t1 ON c.sourcefile_signature = t1.sourcefile_signature;"
+  )
 
   // build query params array
   let queryParams = []
@@ -217,7 +221,7 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
       // get files
       let files = data.filter(e => e.contract == c.ID)
       // exclude already run detectors
-      let usedDetectors = Object.keys(files[0]).filter(e => !['contract', 'filename',  'ID',  'sourceText',  'sourceHash',  'failedAnalysis',  'report'].includes(e) && files[0][e] != '-1')
+      let usedDetectors = Object.keys(files[0]).filter(e => !['sourcefile_signature', 'filename',  'ID',  'sourceText',  'sourceHash',  'failedAnalysis',  'report'].includes(e) && files[0][e] != '-1')
       let detectorsToUse = detectors.filter(e => !usedDetectors.includes(e)) // detectors set by the user - detectors already run on this contract
       returnData.push({ID: c.ID, files: files, detectors: detectorsToUse, sourcefile_signature: c.sourcefile_signature})
 
@@ -255,9 +259,9 @@ async function markContractAsAnalyzed(conn, contractID){
 
 async function markContractAsErrorAnalysis(conn, sourcefile_signature, reset = false, error = ''){
   let query = reset ?
-    "UPDATE slither_analysis AS an INNER JOIN contract AS c ON an.contract = c.ID SET an.failedAnalysis = 0, an.error = ? WHERE sourcefile_signature = ?"
+    "UPDATE slither_analysis AS an SET an.failedAnalysis = 0, an.error = ? WHERE an.sourcefile_signature = ?"
     :
-    "UPDATE slither_analysis AS an INNER JOIN contract AS c ON an.contract = c.ID SET an.failedAnalysis = an.failedAnalysis + 1, an.error = ? WHERE c.sourcefile_signature = ?"
+    "UPDATE slither_analysis AS an SET an.failedAnalysis = an.failedAnalysis + 1, an.error = ? WHERE an.sourcefile_signature = ?"
   try{
     let [data, fields] = await conn.query(query, [error, sourcefile_signature]);
     if(!data.affectedRows){
@@ -275,7 +279,7 @@ async function markContractAsErrorAnalysis(conn, sourcefile_signature, reset = f
 
 async function insertFindingsToDB(conn, sourcefile_signature, output){ 
   // try to update the existing record, insert if update fails 
-  let query = "UPDATE slither_analysis AS an INNER JOIN contract AS c ON an.contract = c.ID SET " + buildFindingsUpdateSubquery(output) + ", an.analysisDate = NOW() WHERE c.sourcefile_signature = ?"
+  let query = "UPDATE slither_analysis AS an SET " + buildFindingsUpdateSubquery(output) + ", an.analysisDate = NOW() WHERE an.sourcefile_signature = ?"
   try{
     let [data, fields] = await conn.query(query, [output.report, sourcefile_signature]);
     if(!data.affectedRows){ 
@@ -374,18 +378,18 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   let hashedSignature = Crypto.createHash('sha256').update(sourcefileSignature).digest('hex') // some contracts have > 100 (up to 180) different sourcefiles
   await updateSourcefileSignature(conn, contractID.data, hashedSignature)
 
-  // create empty analysis record
-  let query = "INSERT INTO slither_analysis (contract, report, error) VALUES (?, '', '')"
-  await performInsertQuery(conn, query, contractID.data)
-  // await insertAnalysisRecord(conn, contractID.data, hashedSignature)
+  // create empty analysis record if not yet at db
+  await insertAnalysisRecord(conn, hashedSignature)
 
   // remove address from addresspool
   await deleteAddressFromPool(conn, chain, contractAddress)
   return contractID.data
 }
 
-async function insertAnalysisRecord(conn, contractID, hashedSignature){
-//TODO
+async function insertAnalysisRecord(conn, hashedSignature){
+  // insert empty
+  let query = "INSERT INTO slither_analysis (sourcefile_signature, report, error) VALUES (?, '', '')"
+  await performInsertQuery(conn, query, hashedSignature, true) // ignore if sourcefile_signatre already in db
 }
 
 async function updateSourcefileSignature(conn, contractID, signature){
@@ -422,26 +426,23 @@ async function insertToContractSourcefile(conn, filename, contract, sourcefileID
 
 async function pushAddressesToPool(conn, chain, addressesList){
   // double check it has not been inserted 
-  let inserted = 0
+  let inserted = 0, rechecks = 0
   for(let addr of addressesList){
-    let insertID = await pushAddressToParsedTable(conn, chain, addr)
-    if(insertID){ // it has been inserted in the table, it means it's new
-      let error = 1
-      while(error <= 5){
-        if(await pushAddressToPoolTable(conn, chain, addr, 'addresspool')){
-          inserted++
-          break
-        }
-        console.log("Error inserting addr " + addr + " to pool. Error #" + error)
-        error++
-        await Utils.sleep(200)
+    let prevInsert =  await getFromParsedPool(conn, chain, addr)
+    if(!prevInsert.length || prevInsert[0].toRefresh == true){
+      await pushAddressToPoolTable(conn, chain, addr, 'addresspool')
+      inserted++
+      if(!prevInsert.length){
+        await pushAddressToParsedTable(conn, chain, addr)
+      }
+      else{
+        rechecks++
       }
     }
-    else{
+    if(prevInsert.length && prevInsert[0].verified == 1)  
       await updateLastTx(conn, chain, addr)
-    }
   }
-  console.log(inserted + " of " + addressesList.length + " new contracts added to db")
+  console.log((inserted - rechecks) + " of " + addressesList.length + " new contracts added to db, " + rechecks + " rechecks")
 }
 
 async function updateLastTx(conn, chain, address){
@@ -453,7 +454,6 @@ async function updateLastTx(conn, chain, address){
     Utils.printQueryError(query, [chain, address], "Error updating lastTx - " + e.message)
   }
 }
-
 
 async function pushAddressToParsedTable(conn, chain, address){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
@@ -528,95 +528,12 @@ async function performInsertQuery(conn, query, params, suppressError = false, is
     return {data: null, error: e.code}
   }
 }
-/**
- * 
- * Verified Getters
- */
-
-async function updateLastParsedAddress(conn, chain, address){
-  let field = 'lastParsedAddress_' + chain.toLowerCase()
-  let query = "UPDATE status set `" + field + "` = ? WHERE ID = 1"
-  try{
-    let [data, fields] = await conn.query(query, address);
-    if(!data.affectedRows){
-      Utils.printQueryError(query, address, "Error setting " + field)
-      return false
-    }
-    return true
-  }
-  catch(e){
-    Utils.printQueryError(query, address, "Error setting " + field + " - " + e.message)
-    return false
-  }
-}
-
-async function getLastParsedAddress(conn, chain){
-  let field = 'lastParsedAddress_' + chain.toLowerCase()
-  let query = "SELECT `" + field + "` FROM status WHERE ID=1;"
-   try{
-      let [data, fields] = await conn.query(query)
-      if(!data.length){
-        console.log("WARNING - Can't get last parsed address - length = 0")
-        return null
-      }
-      return data[0][field]
-    }
-    catch(e){
-      console.log("ERROR - Can't get last parsed address", e.message)
-      return null
-    }
-}
-
-async function pushVerifiedAddressToPoolTable(conn, chain, addr){
-  let insertID = await pushAddressToParsedTable(conn, chain, addr)
-  if(insertID){ // it has been inserted in the table, it means it's new
-    let error = 1
-    while(error <= 5){
-      if(await _pushAddressToPoolTable(conn, chain, addr, 'addresspool')){
-        break
-      }
-      console.log("Error inserting addr " + addr + " to pool. Error #" + error)
-      error++
-      await Utils.sleep(200)
-    }
-  }
-}
-
-async function _pushAddressToPoolTable(conn, chain, address, table){
-  let insertQuery = "INSERT INTO " + table + " (address, chain) VALUES (?,?);"
-  let ret = (await performInsertQuery(conn, insertQuery, [address, chain]) ).data
-  return ret
-}
-
-async function pushVerifiedAddresses(conn, chain, addressesList){
-  let inserted = 0
-  let updated = 0
-  for(let addr of addressesList){
-    let prevFound = await getFromParsedPool(conn, chain, addr)
-    if(prevFound.length){
-      if(prevFound[0].verified){
-        continue
-      }
-      else{
-        setContractVerified(conn, chain, addr)
-        _pushAddressToPoolTable(conn, chain, addr, 'addresspool')
-        updated++
-      }
-    }
-    else{
-      pushVerifiedAddressToPoolTable(conn, chain, addr)
-      inserted++
-    }
-  }
-  console.log(inserted + " inserted, " + updated + " updated of " + addressesList.length + " new addresses")
-  return inserted
-}
 
 async function getFromParsedPool(conn, chain, address){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
-  let query = "SELECT * FROM " + parsedTable + " WHERE address = ?"
+  let query = "SELECT *, (verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() ) as toRefresh, verified FROM " + parsedTable + " WHERE address = ?"
   try{
-    let [data, fields] = await conn.query(query, address);
+    let [data, fields] = await conn.query(query, [address, process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS]);
     return data
   }
   catch(e){
@@ -625,28 +542,8 @@ async function getFromParsedPool(conn, chain, address){
   }
 }
 
-async function setContractVerified(conn, chain, address){
-  let parsedTable = 'parsedaddress_' + chain.toLowerCase()
-  let query = "UPDATE " + parsedTable + " SET verified = 1 WHERE address = ?"
-  try{
-    let [data, fields] = await conn.query(query, address);
-    if(!data.affectedRows){
-      return false
-    }
-    return true
-  }
-  catch(e){
-    Utils.printQueryError(query, address, "Error setting verified=1 on lastParsedBlock_eth_mainnet - " + e.message)
-    return false
-  }
-}
-
-/**
- * 
- * /Verified Getters
- */
 async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {getLastParsedAddress, updateLastParsedAddress, pushVerifiedAddresses, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

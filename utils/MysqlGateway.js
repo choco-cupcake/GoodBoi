@@ -533,7 +533,7 @@ async function getFromParsedPool(conn, chain, address){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
   let query = "SELECT *, (verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() ) as toRefresh, verified FROM " + parsedTable + " WHERE address = ?"
   try{
-    let [data, fields] = await conn.query(query, [address, process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS]);
+    let [data, fields] = await conn.query(query, [process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS, address]);
     return data
   }
   catch(e){

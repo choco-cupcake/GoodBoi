@@ -314,7 +314,6 @@ async function deleteContractSourcefile(conn, contract_sourcefileID){
 
 async function getContract(conn, chain, address){
   let query = "SELECT ID, sourcefile_signature FROM contract WHERE `chain`=? AND address=?"
-  console.log(query);
   try{
     let [data, fields] = await conn.query(query, [chain, address]);
     if(!data.length){

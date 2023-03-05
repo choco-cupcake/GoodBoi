@@ -143,8 +143,10 @@ async function getHashFromDB(conn, h){
 
 async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20Holdings, eth_balance){
   let pruned = await checkPruneContract(conn, chain, contractAddress, totalUSDValue)
-  if(pruned)
+  if(pruned){
+    console.log("pruned ", chain, " - ", contractAddress)
     return true
+  }
 
   let query = "UPDATE balances SET ERC20Holdings = ?, usdValue = ?, ethBalance_bp = ?, lastUpdate = NOW() WHERE address = ? AND chain = ?"
   try{

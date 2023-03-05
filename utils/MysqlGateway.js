@@ -141,24 +141,194 @@ async function getHashFromDB(conn, h){
   }
 }
 
-async function updateBalance(conn, chain, contractAddress, ERC20USDValue, ERC20Holdings, eth_balance){
+async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20Holdings, eth_balance){
+  let pruned = await checkPruneContract(conn, chain, contractAddress, totalUSDValue)
+  if(pruned)
+    return true
+
   let query = "UPDATE balances SET ERC20Holdings = ?, usdValue = ?, ethBalance_bp = ?, lastUpdate = NOW() WHERE address = ? AND chain = ?"
   try{
-    let [data, fields] = await conn.query(query, [ERC20Holdings, ERC20USDValue, eth_balance, contractAddress, chain]);
+    let [data, fields] = await conn.query(query, [ERC20Holdings, totalUSDValue, eth_balance, contractAddress, chain]);
     if(!data.affectedRows){
-      Utils.printQueryError(query, [ERC20Holdings, ERC20USDValue, eth_balance, contractAddress, chain], "Error updating balance - row not found")
+      Utils.printQueryError(query, [ERC20Holdings, totalUSDValue, eth_balance, contractAddress, chain], "Error updating balance - row not found")
       return false
     }
     return true
   }
   catch(e){
-    Utils.printQueryError(query, [ERC20Holdings, ERC20USDValue, eth_balance, contractAddress, chain], "Error updating balance - " + e.message)
+    Utils.printQueryError(query, [ERC20Holdings, totalUSDValue, eth_balance, contractAddress, chain], "Error updating balance - " + e.message)
     return false
   }
 }
 
+async function checkPruneContract(conn, chain, contractAddress, totalUSDValue){
+  if(process.env.CONTRACT_PRUNER_ENABLED && Number(totalUSDValue) < Number(process.env.CONTRACT_PRUNER_MIN_BALANCE)){
+    // check if to prune
+    let query = "SELECT ((lastTx + INTERVAL ? day) <= NOW()) AS toPrune FROM contract WHERE address = ? AND `chain` = ?"; 
+    try{
+      let [data, fields] = await conn.query(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, contractAddress, chain]); 
+      if(!data.length){
+        Utils.printQueryError(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, contractAddress, chain], "Error checking contract pruning - row not found")
+        return false
+      }
+      if(data[0].toPrune){
+        await pruneContract(conn, chain, contractAddress)
+        return true
+      }
+    }
+    catch(e){
+      Utils.printQueryError(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, contractAddress, chain], "Error checking contract pruning - " + e.message)
+      return false
+    }
+  }
+  return false
+}
+
+async function pruneContract(conn, chain, contractAddress){
+  // get contract ID
+  let contract = await getContract(conn, chain, contractAddress)
+  if(!contract) return
+  // get contract_sourcefiles
+  let contract_sourcefiles = await getContractSourcefilesFromContract(conn, contract.ID)
+  for(let contract_sourcefile of contract_sourcefiles){ 
+    //   check if sourcefile unique
+    let sameSourcefilesCount = await getCountContractSourcefilesFromSourcefile(conn, contract_sourcefile.sourcefile)
+    if(sameSourcefilesCount == 1){ // unique: sourcefile was only used by this contract
+      // delete sourcefile
+      await deleteSourcefile(conn, contract_sourcefile.sourcefile)
+    }
+    // delete contract_sourcefile entry
+    await deleteContractSourcefile(conn, contract_sourcefile.ID)
+  }
+  // delete parsedaddress
+  await deleteParsedAddress(conn, chain, contractAddress)
+  // delete analysis
+  await deleteAnalysis(conn, contract.sourcefile_signature)
+  // delete balance
+  await deleteBalance(conn, chain, contractAddress)
+  // delete contract
+  await deleteContract(conn, contract.ID)
+}
+
+async function deleteBalance(conn, chain, contractAddress){
+  let query = "DELETE FROM balances WHERE `chain`=? AND address=?"
+  try{
+    await conn.query(query, [chain, contractAddress]);
+  }
+  catch(e){
+    Utils.printQueryError(query, [chain, contractAddress], e.message)
+  }
+}
+
+async function deleteParsedAddress(conn, chain, address){
+  let parsedTable = 'parsedaddress_' + chain.toLowerCase()
+  let query = "DELETE FROM " + parsedTable + " WHERE address = ?"
+  try{
+    await conn.query(query, [address]);
+  }
+  catch(e){
+    Utils.printQueryError(query, [address], e.message)
+  }
+}
+
+async function deleteAnalysis(conn, sourcefile_signature){
+  if(await getAnalysisCount(conn, sourcefile_signature) != 1)
+    return // analysis non only for this contract
+    
+  let query = "DELETE FROM slither_analysis WHERE sourcefile_signature = ?"
+  try{
+    await conn.query(query, [sourcefile_signature]);
+  }
+  catch(e){
+    Utils.printQueryError(query, [sourcefile_signature], e.message)
+  }
+}
+
+async function getAnalysisCount(conn, sourcefile_signature){
+  let query = "SELECT COUNT(*) AS c FROM slither_analysis WHERE sourcefile_signature = ?"
+  try{
+    let [data, fields] = await conn.query(query, [sourcefile_signature]);
+    if(!data.length)
+      return null
+    return Number(data[0].c)
+  }
+  catch(e){
+    Utils.printQueryError(query, [sourcefile_signature], e.message)
+    return null
+  }
+}
+
+async function getContractSourcefilesFromContract(conn, contractID){
+  let query = "SELECT * FROM contract_sourcefile WHERE contract=?"
+  try{
+    let [data, fields] = await conn.query(query, [contractID]);
+    if(!data.length){
+      Utils.printQueryError(query, [contractID], "cant find contract_sourcefile from contract")
+      return []
+    }
+    return data
+  }
+  catch(e){
+    Utils.printQueryError(query, [contractID], e.message)
+    return []
+  }
+}
+
+async function getCountContractSourcefilesFromSourcefile(conn, sourcefile){
+  let query = "SELECT COUNT(*) AS c FROM contract_sourcefile WHERE sourcefile=?"
+  try{
+    let [data, fields] = await conn.query(query, [sourcefile]);
+    if(!data.length){
+      Utils.printQueryError(query, [sourcefile], "cant find contract_sourcefile from sourcefile")
+      return null
+    }
+    return Number(data[0].c)
+  }
+  catch(e){
+    Utils.printQueryError(query, [sourcefile], e.message)
+    return null
+  }
+}
+
+async function deleteSourcefile(conn, sourcefile){
+  let query = "DELETE FROM sourcefile WHERE ID=?"
+  try{
+    await conn.query(query, [sourcefile]);
+  }
+  catch(e){
+    Utils.printQueryError(query, [sourcefile], e.message)
+  }
+}
+
+async function deleteContractSourcefile(conn, contract_sourcefileID){
+  let query = "DELETE FROM contract_sourcefile WHERE ID=?"
+  try{
+    await conn.query(query, [contract_sourcefileID]);
+  }
+  catch(e){
+    Utils.printQueryError(query, [contract_sourcefileID], e.message)
+  }
+}
+
+async function getContract(conn, chain, address){
+  let query = "SELECT ID, sourcefile_signature FROM contract WHERE `chain`=? AND address=?"
+  console.log(query);
+  try{
+    let [data, fields] = await conn.query(query, [chain, address]);
+    if(!data.length){
+      Utils.printQueryError(query, [chain, address], "cant find contract ID from (address,chain)")
+      return null
+    }
+    return data[0]
+  }
+  catch(e){
+    Utils.printQueryError(query, [chain, address], e.message)
+    return null
+  }
+}
+
 async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
-  let query = "SELECT ID, address FROM balances WHERE chain=? AND lastUpdate < NOW() - INTERVAL ? DAY LIMIT ?"
+let query = "SELECT ID, address FROM balances WHERE `chain`=? AND lastUpdate < NOW() - INTERVAL ? DAY LIMIT ?"
   try{
     let [data, fields] = await conn.query(query, [chain, daysOld, +batchSize]);
     return data
@@ -361,7 +531,7 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
       let sourcecodeID = (await performInsertQuery(conn, insertFileQuery, [f.source, sourceHash])).data
       if(!sourcecodeID){
         console.log("ERROR inserting sourcefile for contract " + contractID.data)
-        await deleteContract(conn, chain, contractID.data) // delete inserted contract
+        await deleteContract(conn, contractID.data) // delete inserted contract
         return null
       }
       csfID = await insertToContractSourcefile(conn, f.filename, contractID.data, sourcecodeID)
@@ -481,17 +651,17 @@ async function deleteAddressFromPool(conn, chain, address){
   }
 }
 
-async function deleteContract(conn, chain, id){
-  let query = "DELETE FROM contract WHERE ID = ? AND chain = ?"
+async function deleteContract(conn, id){
+  let query = "DELETE FROM contract WHERE ID = ?"
   try{
-    let [data, fields] = await conn.query(query, [id, chain]);
+    let [data, fields] = await conn.query(query, [id]);
     if(!data.affectedRows){
-      console.log("WARNING - Tried to delete contract but it was not there - " + address + " - " + chain)
+      console.log("WARNING - Tried to delete contract but it was not there - " + id)
     }
     return data.insertId
   }
   catch(e){
-    Utils.printQueryError(query, [id, chain], e.message)
+    Utils.printQueryError(query, [id], e.message)
   }
 }
 

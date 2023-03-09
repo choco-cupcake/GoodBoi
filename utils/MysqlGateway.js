@@ -329,7 +329,7 @@ async function getContract(conn, chain, address){
 }
 
 async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
-let query = "SELECT ID, address FROM balances WHERE `chain`=? AND lastUpdate < NOW() - INTERVAL ? DAY LIMIT ?"
+let query = "SELECT b.ID, b.address FROM balances AS b, contract AS c WHERE b.`chain`=? AND b.lastUpdate < NOW() - INTERVAL ? DAY AND c.address=b.address AND c.`chain`=b.`chain` ORDER BY c.lastTx ASC LIMIT ? "
   try{
     let [data, fields] = await conn.query(query, [chain, daysOld, +batchSize]);
     return data
@@ -372,7 +372,7 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
       console.log("WARNING - Can't get contracts to analyze - length = 0")
       return {eor: true, data: []}
     }
-    if(data.length < limit){
+    if(data.length < len){
       endOfResults = true
     }
     else{
@@ -491,6 +491,16 @@ async function markAsUnverified(conn, chain, address){
 }
 
 async function pushSourceFiles(conn, chain, contractObj, contractAddress){
+  // check if sourcefiles are https link, drop contract if so (hit rate 4/700k , close to no loss)
+  for(let f of contractObj.SourceCode){
+    let patt = "https://"
+    if(f.filename.toLowerCase.substring.substring(0, patt.length) == patt){
+      // remove address from addresspool
+      await deleteAddressFromPool(conn, chain, contractAddress)
+      return 1
+    }
+  }
+  
   // create contract record
   let contractQuery = "INSERT INTO contract (chain, address, contractName, compilerVersion, compilerVersion_int, optimizationUsed, runs, constructorArguments, EVMVersion, library, licenseType, proxy, implementation, swarmSource)" +
     " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"

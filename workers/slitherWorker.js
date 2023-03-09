@@ -10,10 +10,10 @@ async function runAnalysis(){
   let startTime = Date.now()
   let slitherOutput = await executeSlither(workerData.workingPath, workerData.analysisPath, workerData.detectors)
   let slitherResult = inspectSlitherOutput(slitherOutput, workerData.detectors)
-  console.log(Object.keys(slitherResult.findings).filter( k => slitherResult.findings[k] == 1).join(","))
+  let hits = Object.keys(slitherResult.findings).filter( k => slitherResult.findings[k] == 1).join(",")
+  if(hits.length) console.log("hit: " + hits)
   let elapsed = Date.now() - startTime
-  console.log("ELAPSED " + elapsed)
-  parentPort.postMessage(slitherResult);
+  parentPort.postMessage({output:slitherResult, elapsed: elapsed});
   process.exit()
 }
 

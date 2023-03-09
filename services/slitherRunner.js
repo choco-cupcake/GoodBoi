@@ -17,8 +17,9 @@ let failedCounter = 0
 let detectorsOfInterest, chain, minUsdValue
 let endOfResults = false
 let activeWorkers = 0
+let startTime
 
-launchAnalysis()
+launchAnalysis('all', 1000)
 
 async function launchAnalysis(_chain, _minUsdValue){ 
   mysqlConn = await mysql.getDBConnection()
@@ -28,6 +29,7 @@ async function launchAnalysis(_chain, _minUsdValue){
 
   await fillPool()
   createAnalysisFolder()
+  startTime = Date.now()
   for(let i=0; i < slitherInstances; i++){
     await launchWorker()
     activeWorkers++
@@ -44,7 +46,7 @@ async function createAnalysisFolder(){ // buffer to write .sol file to feed slit
 }
 
 async function getActiveDetectors(){
-  let allDetectors = Detectors.detectors_slither_high.concat(Detectors.custom_detectors)
+  let allDetectors = Detectors.detectors_slither_high.concat(Detectors.custom_detectors).concat(Detectors.detectrs_slither_badcode)
   let analysisColumn = (await mysql.getSlitherAnalysisColumns(mysqlConn)).map(e => 
     e.COLUMN_NAME.toLowerCase()
     )
@@ -61,9 +63,18 @@ async function launchWorker(){
   analyzedCounter++
   let contract = await contractPool.pop()
   let solcPath = getSolcPath(contract.files[0].compilerVersion)
-  console.log("#" + contract.ID + " start - " + failedCounter + "/" + analyzedCounter + " failed")
   let folderpath = preparePath(contract.files)
   _launchWorker(contract, folderpath, solcPath)
+}
+
+function logStatus(id, elapsedSlither){// #XXX start - speed: 78apm - avg analysis time: 1234ms - in 24h:
+  let elapsedTotal = Date.now() - startTime
+  let speed_apm = Math.floor(analyzedCounter / (elapsedTotal / 1000 / 60)) // apm = analysis per minute
+  let avgtime = Math.floor(elapsedTotal / analyzedCounter)
+  let in24h = Math.floor(24 * 60 * 60 * 1000 / avgtime)
+  let errorRate = Math.floor(failedCounter * 10000 / analyzedCounter) / 100
+  console.log("#" + id + " done - took " + elapsedSlither + "ms  -  speed: " + speed_apm + "apm  -  in 24h: " + in24h + "  -  error rate: " + errorRate + "%")
+
 }
 
 function getSolcPath(compVer){
@@ -79,8 +90,10 @@ function getSolcPath(compVer){
 }
 
 async function workerCleanup(toClean){
+  if(toClean?.elapsed){
+    logStatus(toClean.contractID, toClean.elapsed)
+  }
   if(toClean?.output?.success){
-    console.log("Analysis of contract ID=" + toClean.contractID + " successfully finished")
     await mysql.insertFindingsToDB(mysqlConn, toClean.sourcefile_signature, toClean.output)
   }
   else{
@@ -129,11 +142,11 @@ function _launchWorker(contract, folderpath, solcpath){
   })
   w.on('error', (err) => { console.log(err.message); });
   w.on('exit', () => {
-    console.log("#" + contract.ID + " done")
     workerCleanup(_toClean)
   })
   w.on('message', (msg) => {
-    _toClean['output'] = msg
+    _toClean['output'] = msg.output
+    _toClean['elapsed'] = msg.elapsed
   });
 }
 

@@ -490,6 +490,24 @@ async function markAsUnverified(conn, chain, address){
   }
 }
 
+// contracts are marked as verified by default, and later set as unverified. This function is used for contracts verified days after deployment
+async function markAsVerified(conn, chain, address){
+  let parsedTable = 'parsedaddress_' + chain.toLowerCase()
+  let query = "UPDATE " + parsedTable + " SET verified = 1 WHERE address = ?"
+  try{
+    let [data, fields] = await conn.query(query, address);
+    if(!data.affectedRows){ 
+      Utils.printQueryError(query, address, "Error marking address as unverified")
+    }
+    await deleteAddressFromPool(conn, chain, address)
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, address, "Error marking address as unverified " + e.message)
+    return false
+  }
+}
+
 async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   // check if sourcefiles are https link, drop contract if so (hit rate 4/700k , close to no loss)
   for(let f of contractObj.SourceCode){
@@ -500,7 +518,7 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
       return 1
     }
   }
-  
+
   // create contract record
   let contractQuery = "INSERT INTO contract (chain, address, contractName, compilerVersion, compilerVersion_int, optimizationUsed, runs, constructorArguments, EVMVersion, library, licenseType, proxy, implementation, swarmSource)" +
     " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
@@ -564,6 +582,10 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
 
   // remove address from addresspool
   await deleteAddressFromPool(conn, chain, contractAddress)
+
+  // mark address as verified, in case of a succesful recheck
+  await markAsVerified(conn, chain, contractAddress)
+  
   return contractID.data
 }
 

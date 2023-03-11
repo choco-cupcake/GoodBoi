@@ -512,7 +512,7 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   // check if sourcefiles are https link, drop contract if so (hit rate 4/700k , close to no loss)
   for(let f of contractObj.SourceCode){
     let patt = "https://"
-    if(f.filename.toLowerCase.substring(0, patt.length) == patt){
+    if(f.filename.toLowerCase().substring(0, patt.length) == patt){
       // remove address from addresspool
       await deleteAddressFromPool(conn, chain, contractAddress)
       return 1

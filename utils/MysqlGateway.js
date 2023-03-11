@@ -354,7 +354,7 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors){
     minUsdValue != 0 ? "  INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address " : "",
     "  INNER JOIN slither_analysis AS an ON an.sourcefile_signature = c.sourcefile_signature ",
     chain != 'all' ? "  WHERE c.chain = 'POLYGON' " : "",
-    minUsdValue != 0 ? "  AND b.usdValue >= 0 " : "",
+    minUsdValue != 0 ? "  AND b.usdValue >= ? " : "",
     "  AND an.failedAnalysis = 0 ",
     detSub, // keeps only contracts not yet analyzed for these detectors
     "  LIMIT " + len,
@@ -512,7 +512,7 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   // check if sourcefiles are https link, drop contract if so (hit rate 4/700k , close to no loss)
   for(let f of contractObj.SourceCode){
     let patt = "https://"
-    if(f.filename.toLowerCase.substring.substring(0, patt.length) == patt){
+    if(f.filename.toLowerCase.substring(0, patt.length) == patt){
       // remove address from addresspool
       await deleteAddressFromPool(conn, chain, contractAddress)
       return 1
@@ -585,7 +585,7 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
 
   // mark address as verified, in case of a succesful recheck
   await markAsVerified(conn, chain, contractAddress)
-  
+
   return contractID.data
 }
 

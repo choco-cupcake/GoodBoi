@@ -9,3 +9,4 @@ dev/
 custom_detectors/
 mysqlBackup/
 utils/chrome-win/
+scripts/contractsGetter/download/

@@ -117,11 +117,73 @@ class Utils {
     return cleanedSource
   }
 
-static cleanWeirdChars(str){ // this covers only the case of a not imported contract, 
-															// where the three structure gets flattened (no filename duplicates).
-															// happened once in 800k contracts it should not impact much
-	return str.replace(/[^\x20-\x7E]/g, ""); // keeps ascii chars [32-126]
-}
+  static cleanWeirdChars(str){ 
+    // this covers only the case of a not imported contract, 
+    // where the three structure gets flattened (no filename duplicates).
+    // happened once in 800k contracts it should not impact much
+	  return str.replace(/[^\x20-\x7E]/g, ""); // keeps ascii chars [32-126]
+  }
+
+  static getAddressVars(sourcefiles, contractName){ 
+    // get the specific source file if it matches with the contract name
+    let desiredContract = sourcefiles.filter(e => e.filename == contractName + ".sol")
+    // or get the single one, or chain all of them and look for the contract definition
+    if(desiredContract.length)
+      desiredContract = desiredContract[0].source
+    else
+      desiredContract = sourcefiles.map(e => e.source).join("\n")
+    // assumption: state vars are declared before constructor/modifiers/functions. 
+    // This should hold on properly written contracts (handling decent amount of money)
+    const breakingKeywords = ["constructor", "function", "modifier", "receive", "fallback"]
+    const varRegex = /^(address|ERC20|IERC20) public / // tokens vars are public most of the times. this also simplifies the value retrieval
+    const mappingRegex = /^mapping ?\( ?uint(256|128|64|32|16|8) ?=> ?(address|ERC20|IERC20)\) public / // same for pools
+    let lines = desiredContract.split("\n")
+    let header = "contract " + contractName
+    let inContract = false
+    let stateAddressVars = [], mappingUintAddress = []
+    outerLoop:
+    for(let l of lines){
+      let line = l.trim().split(";")[0].trim()
+      if(!inContract){
+        if(this.startsWith(line, header))
+          inContract = true
+      }
+      else{
+        for(let bk of breakingKeywords){
+          if(this.startsWith(line, bk))
+            break outerLoop
+        }
+        // check if is state var
+        if(line.match(varRegex)){
+          stateAddressVars.push(this.getVarName(line))
+        } else if(line.match(mappingRegex)){
+          mappingUintAddress.push(this.getMappingName(line))
+        }
+      }
+    }
+    return {stateAddressVars: stateAddressVars, mappingUintAddress: mappingUintAddress}
+  }
+
+  static getVarName(line){
+    // address public varname = address(0);
+    let eqPos = line.indexOf("=")
+    if(eqPos >= 0){
+      line = line.substring(0, eqPos).trim()
+    }
+    let words = line.split(" ")
+    return words[words.length - 1].trim()
+  }
+
+  static getMappingName(line){
+    // mapping (address => uint256) private mapname;
+    let words = line.split(" ")
+    return words[words.length - 1].trim()
+  }
+
+  static startsWith(str, patt){
+    str = str.substring(0, patt.length)
+    return str == patt
+  }
 }
 
 module.exports = Utils;

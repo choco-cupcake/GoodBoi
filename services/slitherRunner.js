@@ -5,7 +5,15 @@ const { Worker } = require('worker_threads');
 const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');
 const Detectors = require('../data/slither_detectors');
+const { program } = require('commander');
 
+program
+  .option('--refilter <string>', 'detector to refilter (only analyzes this detector\'s previous hits');
+
+program.parse();
+const cliOptions = program.opts();
+if(cliOptions.refilter)
+  console.log("Refiltering detector: " + cliOptions.refilter)
 
 const slitherInstances = process.env.SLITHER_INSTANCES
 const poolSize = slitherInstances * 100
@@ -18,8 +26,9 @@ let detectorsOfInterest, chain, minUsdValue
 let endOfResults = false
 let activeWorkers = 0
 let startTime
+const minBalance = process.env.ANALYSIS_MIN_BALANCE
 
-launchAnalysis('all', 1000)
+launchAnalysis('all', minBalance)
 
 async function launchAnalysis(_chain, _minUsdValue){ 
   mysqlConn = await mysql.getDBConnection()
@@ -30,11 +39,16 @@ async function launchAnalysis(_chain, _minUsdValue){
   await fillPool()
   createAnalysisFolder()
   startTime = Date.now()
+  setInterval(mysqlKeepAlive, 5000)
   for(let i=0; i < slitherInstances; i++){
     await launchWorker()
     activeWorkers++
     await Utils.sleep(100)
   }
+}
+
+async function mysqlKeepAlive(){
+  await mysql.keepAlive(mysqlConn)
 }
 
 async function createAnalysisFolder(){ // buffer to write .sol file to feed slither
@@ -140,7 +154,9 @@ function _launchWorker(contract, folderpath, solcpath){
       solcpath: solcpath
     }
   })
-  w.on('error', (err) => { console.log(err.message); });
+  w.on('error', (err) => { 
+    console.log(err.message); 
+  });
   w.on('exit', () => {
     workerCleanup(_toClean)
   })
@@ -153,7 +169,7 @@ function _launchWorker(contract, folderpath, solcpath){
 
 async function fillPool(){
   filling = true
-  let newPool = await mysql.getBatchToAnalyze(mysqlConn, poolSize, chain, minUsdValue, detectorsOfInterest)
+  let newPool = await mysql.getBatchToAnalyze(mysqlConn, poolSize, chain, minUsdValue, detectorsOfInterest, cliOptions.refilter)
   endOfResults = newPool.eor
   contractPool.length = 0
   for(let c of newPool.data)

@@ -9,6 +9,10 @@ async function runAnalysis(){
   //setTimeout(() => { console.log("######## WORKER KILLED"); process.exit() }, 20000)
   let startTime = Date.now()
   let slitherOutput = await executeSlither(workerData.workingPath, workerData.analysisPath, workerData.detectors)
+  if(!slitherOutput){
+    parentPort.postMessage({output:{success: false, error: 'Empty Slither output - Likely solc error'}, elapsed: 0});
+    process.exit()
+  }
   let slitherResult = inspectSlitherOutput(slitherOutput, workerData.detectors)
   let hits = Object.keys(slitherResult.findings).filter( k => slitherResult.findings[k] == 1).join(",")
   if(hits.length) console.log("hit: " + hits)
@@ -22,31 +26,39 @@ function executeSlither(workingPath, analysisPath, detectors){
   // run slither
   const slitherProg = spawnSync('python3', slitherParams, {cwd: workingPath}); 
   let out = slitherProg.stdout.toString()
+  if(!out.length)
+    return null
   return JSON.parse(out)
 }
 
 function inspectSlitherOutput(slitherOutput, detectorsUsed){
-  let detectorsResult = {} 
+  let findingsObj = {} 
   if(!slitherOutput.success){
     return {success: false, error: slitherOutput.error}
   }
   if(!slitherOutput.results?.detectors){
     for(let det of detectorsUsed)
-      detectorsResult[det] = 0
-    return {success: true, report: '', findings: detectorsResult} 
+      findingsObj[det] = {isHit: 0, report: ''}
+    return {success: true, findings: findingsObj} 
   }
-  let descriptions = []
   let detectorsHit = new Set()
+  let detectorsReport = {}
   for(let det of slitherOutput.results.detectors){
     detectorsHit.add(det.check)
-    descriptions.push(det.description)
+    if(!detectorsReport[det.check])
+      detectorsReport[det.check] = det.description
+    else
+      detectorsReport[det.check] += det.description + "\n"
   }
+
   // build the full detectors outcome
   for(let det of detectorsUsed){
-    let v = 0
-    if(detectorsHit.has(det)) 
-      v = 1
-    detectorsResult[det] = v
+    let isHit = detectorsHit.has(det) ? 1 : 0
+    let rep = isHit ? detectorsReport[det] : ''
+    findingsObj[det] = {isHit: isHit, report: rep}
   }
-  return {success: true, report: descriptions.join("\n"), findings: detectorsResult}
+  if(detectorsHit.length){
+    console.log(Array.from(detectorsHit).join(", "))
+  }
+  return {success: true, findings: findingsObj}
 }

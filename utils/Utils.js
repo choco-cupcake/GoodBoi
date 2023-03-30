@@ -154,14 +154,24 @@ class Utils {
             break outerLoop
         }
         // check if is state var
+        let mappingMatchStr = line.match(mappingRegex)
         if(line.match(varRegex)){
           stateAddressVars.push(this.getVarName(line))
-        } else if(line.match(mappingRegex)){
-          mappingUintAddress.push(this.getMappingName(line))
+        } else if(mappingMatchStr){
+          let uintSize = this.getUintSize(mappingMatchStr[0])
+          mappingUintAddress.push({name: this.getMappingName(line), uintSize: uintSize})
         }
       }
     }
+    if(!stateAddressVars.length && !mappingUintAddress.length)
+      return null
     return {stateAddressVars: stateAddressVars, mappingUintAddress: mappingUintAddress}
+  }
+
+  static getUintSize(mappingLine){
+    let t = mappingLine.split("=>")[0].trim()
+    let type = t.split("(")[1].trim()
+    return type == 'uint' ? 'uint256' : type 
   }
 
   static getVarName(line){
@@ -175,7 +185,7 @@ class Utils {
   }
 
   static getMappingName(line){
-    // mapping (address => uint256) private mapname;
+    // mapping (uint256 => address) public mapname;
     let words = line.split(" ")
     return words[words.length - 1].trim()
   }

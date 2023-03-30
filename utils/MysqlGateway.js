@@ -2,6 +2,23 @@ const Database = require('./DB')
 const Utils = require('./Utils')
 const Crypto = require('crypto')
 
+
+async function getBatchVarsToRead(conn){
+  let query = "SELECT ID, addressVars FROM `contract` WHERE addressVars IS NOT NULL AND DATE_SUB(NOW(), INTERVAL ? DAY) > varsUpdatedAt OR varsUpdatedAt IS NULL LIMIT ?;"
+  try{
+    let [data, fields] = await conn.query(query, [process.env.STATE_VARS_REFRESH_DAYS, process.env.STATE_VARS_BATCH_LEN])
+    if(!data.length){
+      console.log("ERROR - Can't get batch vars to read")
+      return null
+    }
+    return data
+  }
+  catch(e){
+    console.log("ERROR - Can't get batch vars to read", e.message)
+    return null
+  }
+}
+
 async function keepAlive(conn){
   let query = "SELECT 1;"
   try{
@@ -573,13 +590,17 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
 
   // get address state variables object
   let stateVarsObj = Utils.getAddressVars(contractObj.SourceCode, contractObj.ContractName)
-  // TODO ======================================
 
   // create contract record
-  let contractQuery = "INSERT INTO contract (chain, address, contractName, compilerVersion, compilerVersion_int, optimizationUsed, runs, constructorArguments, EVMVersion, library, licenseType, proxy, implementation, swarmSource, addressVars)" +
-    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
-  let contractID = await performInsertQuery(conn, contractQuery, [chain, contractAddress, contractObj.ContractName, contractObj.CompilerVersion, contractObj.CompilerVersion_int, contractObj.OptimizationUsed, contractObj.Runs, 
-    contractObj.ConstructorArguments,contractObj.EVMVersion, contractObj.Library, contractObj.LicenseType, contractObj.Proxy, contractObj.Implementation, contractObj.SwarmSource, JSON.stringify(stateVarsObj)], true)
+  let queryFields = ["chain", "address", "contractName", "compilerVersion", "compilerVersion_int", "optimizationUsed", "runs", "constructorArguments", "EVMVersion", "library", "licenseType", "proxy", "implementation", "swarmSource"]
+  let queryParams = [chain, contractAddress, contractObj.ContractName, contractObj.CompilerVersion, contractObj.CompilerVersion_int, contractObj.OptimizationUsed, contractObj.Runs, 
+    contractObj.ConstructorArguments,contractObj.EVMVersion, contractObj.Library, contractObj.LicenseType, contractObj.Proxy, contractObj.Implementation, contractObj.SwarmSource]
+  if(stateVarsObj){ // no addr vars/mappings found, leave default NULL
+    queryFields.push("addressVars")
+    queryParams.push(JSON.stringify(stateVarsObj))
+  }
+  let contractQuery = "INSERT INTO contract (" + queryFields.join(",") + ") VALUES (" + "?,".repeat(queryFields.length - 1) + "?)"
+  let contractID = await performInsertQuery(conn, contractQuery, queryParams, true)
   if(!contractID || contractID.error){
     if(contractID.error == 'ER_DUP_ENTRY'){
       console.log("WARNING - Trying to push a contract already inserted")
@@ -807,4 +828,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

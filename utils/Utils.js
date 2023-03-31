@@ -156,16 +156,16 @@ class Utils {
         // check if is state var
         let mappingMatchStr = line.match(mappingRegex)
         if(line.match(varRegex)){
-          stateAddressVars.push(this.getVarName(line))
+          stateAddressVars.push({name: this.getVarName(line), val: ''})
         } else if(mappingMatchStr){
           let uintSize = this.getUintSize(mappingMatchStr[0])
-          mappingUintAddress.push({name: this.getMappingName(line), uintSize: uintSize})
+          mappingUintAddress.push({name: this.getMappingName(line), uintSize: uintSize, val: []})
         }
       }
     }
     if(!stateAddressVars.length && !mappingUintAddress.length)
       return null
-    return {stateAddressVars: stateAddressVars, mappingUintAddress: mappingUintAddress}
+    return {SAV: stateAddressVars, SAM: mappingUintAddress}
   }
 
   static getUintSize(mappingLine){

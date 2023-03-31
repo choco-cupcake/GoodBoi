@@ -164,7 +164,8 @@ async function refreshBatch(){
   for(let _cw of _contractsWIP){
     await mysql.updateAddressVars(dbConn, _cw.cID, JSON.stringify(_cw.varObj))
     readContracts++
-    console.log("Done " + _cw.cID + " - calls: " + callsPerformed + " - contracts read: " + readContracts)
+    if(readContracts % 500 == 0)
+      console.log("calls: " + callsPerformed + " - contracts read: " + readContracts)
   }
 
   if(contractPool.length)

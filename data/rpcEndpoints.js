@@ -1,4 +1,14 @@
+require("dotenv").config()
+
 const endpoints = {
+  "ETH_MAINNET" : ["wss://mainnet.infura.io/ws/v3/" + process.env.INFURA_API_KEY,
+                  "https://eth.llamarpc.com",
+                  "https://ethereum.publicnode.com",
+                  "https://rpc.ankr.com/eth",
+                  "https://eth.rpc.blxrbdn.com",
+                  "https://cloudflare-eth.com",
+                  "https://ethereum.blockpi.network/v1/rpc/public",
+                  "https://rpc.payload.de",],
   "BSC_MAINNET" : ["https://rpc.ankr.com/bsc", 
                   "https://bsc-dataseed1.binance.org", 
                   "https://bsc-dataseed2.binance.org", 
@@ -11,8 +21,17 @@ const endpoints = {
                   "https://bsc-dataseed1.ninicoin.io", 
                   "https://bsc-dataseed2.ninicoin.io", 
                   "https://bsc-dataseed3.ninicoin.io", 
-                  "https://bsc-dataseed4.ninicoin.io"],
-  "POLYGON" : ["https://polygon-rpc.com", "https://rpc.ankr.com/polygon"]
+                  "https://bsc-dataseed4.ninicoin.io", 
+                  "https://bsc.rpc.blxrbdn.com", 
+                  "https://bsc.blockpi.network/v1/rpc/public"],
+  "POLYGON" : ["https://polygon-rpc.com", 
+              "https://rpc.ankr.com/polygon",
+              "https://polygon.llamarpc.com",
+              "https://polygon.rpc.blxrbdn.com",
+              "https://polygon.blockpi.network/v1/rpc/public",
+              "https://polygon-mainnet.public.blastapi.io",
+              "https://poly-rpc.gateway.pokt.network",
+              "https://polygon-bor.publicnode.com"]
 }
 
 module.exports = endpoints

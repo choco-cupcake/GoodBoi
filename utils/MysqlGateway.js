@@ -2,15 +2,29 @@ const Database = require('./DB')
 const Utils = require('./Utils')
 const Crypto = require('crypto')
 
-
-async function getBatchVarsToRead(conn){
-  let query = "SELECT ID, addressVars FROM `contract` WHERE addressVars IS NOT NULL AND DATE_SUB(NOW(), INTERVAL ? DAY) > varsUpdatedAt OR varsUpdatedAt IS NULL LIMIT ?;"
+async function updateAddressVars(conn, cID, addrVars){
+  let query = "UPDATE contract SET addressVars = ?, varsUpdatedAt = NOW() WHERE ID = ?;"
   try{
-    let [data, fields] = await conn.query(query, [process.env.STATE_VARS_REFRESH_DAYS, process.env.STATE_VARS_BATCH_LEN])
-    if(!data.length){
-      console.log("ERROR - Can't get batch vars to read")
-      return null
+    let [data, fields] = await conn.query(query, [addrVars, cID]);
+    if(!data.affectedRows){
+      Utils.printQueryError(query, [addrVars, cID], "Error updating addressVars")
+      return false
     }
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, [addrVars, cID], "Error updating addressVars - " + e.message)
+    return false
+  }
+}
+
+async function getBatchVarsToRead(conn, chain){
+  const batchLen = process.env.STATE_VARS_BATCH_LEN
+  const daysRefresh = process.env.STATE_VARS_REFRESH_DAYS
+  const waitDays = process.env.STATE_VARS_WAIT_DAYS
+  let query = "SELECT ID, address, addressVars FROM `contract` WHERE `chain`=? AND addressVars IS NOT NULL AND DATE_SUB(NOW(), INTERVAL ? DAY) > dateFound AND (DATE_SUB(NOW(), INTERVAL ? DAY) > varsUpdatedAt OR varsUpdatedAt IS NULL) LIMIT ?;"
+  try{
+    let [data, fields] = await conn.query(query, [chain, waitDays, daysRefresh, Number(batchLen)])
     return data
   }
   catch(e){
@@ -828,4 +842,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

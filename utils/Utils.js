@@ -136,11 +136,12 @@ class Utils {
     // This should hold on properly written contracts (handling decent amount of money)
     const breakingKeywords = ["constructor", "function", "modifier", "receive", "fallback"]
     const varRegex = /^(address|ERC20|IERC20) public / // tokens vars are public most of the times. this also simplifies the value retrieval
+    const arrRegex = /^(address|ERC20|IERC20)\[\] public / 
     const mappingRegex = /^mapping ?\( ?uint(256|128|64|32|16|8) ?=> ?(address|ERC20|IERC20)\) public / // same for pools
     let lines = desiredContract.split("\n")
     let header = "contract " + contractName
     let inContract = false
-    let stateAddressVars = [], mappingUintAddress = []
+    let stateAddressVars = [], mappingUintAddress = [], stateAddressArrays = []
     outerLoop:
     for(let l of lines){
       let line = l.trim().split(";")[0].trim()
@@ -157,15 +158,17 @@ class Utils {
         let mappingMatchStr = line.match(mappingRegex)
         if(line.match(varRegex)){
           stateAddressVars.push({name: this.getVarName(line), val: ''})
-        } else if(mappingMatchStr){
+        } else if(mappingMatchStr){ // in the end won't use this, but who knows in the future
           let uintSize = this.getUintSize(mappingMatchStr[0])
           mappingUintAddress.push({name: this.getMappingName(line), uintSize: uintSize, val: []})
+        } else if(line.match(arrRegex)){ // array of addresses
+          stateAddressArrays.push({name: this.getVarName(line), val: []})
         }
       }
     }
-    if(!stateAddressVars.length && !mappingUintAddress.length)
+    if(!stateAddressVars.length && !mappingUintAddress.length && !stateAddressArrays.length)
       return null
-    return {SAV: stateAddressVars, SAM: mappingUintAddress}
+    return {SAV: stateAddressVars, SAA: stateAddressArrays, SAM: mappingUintAddress}
   }
 
   static getUintSize(mappingLine){
@@ -176,6 +179,7 @@ class Utils {
 
   static getVarName(line){
     // address public varname = address(0);
+    line = line.replaceAll("[]", "") // using this function also for array vars
     let eqPos = line.indexOf("=")
     if(eqPos >= 0){
       line = line.substring(0, eqPos).trim()

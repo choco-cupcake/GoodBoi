@@ -194,6 +194,32 @@ class Utils {
     return words[words.length - 1].trim()
   }
 
+  static isVarAllowed(varName){
+    let uninteresting_vars = require("../data/state_vars").uninteresting_vars
+    for(let exact of uninteresting_vars.exact){
+      if(varName == exact)
+        return false
+    }
+    for(let anypos of uninteresting_vars.anypos){
+      if(varName.toLowerCase().includes(anypos))
+        return false
+    }
+    return true
+  }
+
+  static isMapAllowed(varName){
+    let interesting_mappings = require("../data/state_vars").interesting_mappings
+    for(let exact of interesting_mappings.exact){
+      if(varName == exact)
+        return true
+    }
+    for(let anypos of interesting_mappings.anypos){
+      if(varName.toLowerCase().includes(anypos))
+        return true
+    }
+    return false
+  }
+
   static startsWith(str, patt){
     str = str.substring(0, patt.length)
     return str == patt

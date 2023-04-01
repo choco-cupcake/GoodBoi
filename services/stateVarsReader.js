@@ -75,27 +75,36 @@ async function refreshVarsValues(){
 
 async function refreshBatch(){
   let varsCalls = []
+  let arrCalls = []
   let mapCalls = []
   let contractsWIP = []
   let _contractsWIP = []
-  while(contractPool.length && varsCalls.length < maxReadsPerTx && (mapCalls.length * 5) < maxReadsPerTx ){ // (mapCalls.length * 5) bc we check the first 5 indexes of the uint=>addr mappings
+  while(contractPool.length && varsCalls.length < maxReadsPerTx && (mapCalls.length * 5) < maxReadsPerTx  && (arrCalls.length * 5) < maxReadsPerTx ){ // (mapCalls.length * 5) bc we check the first 5 indexes of the uint=>addr mappings
     let contract = contractPool.pop()
     let varObj = JSON.parse(contract.addressVars)
-    _contractsWIP.push({cID: contract.ID, varObj: varObj})
-    for(let addrVar of varObj.SAV){
+    _contractsWIP.push({cID: contract.ID, varObj: varObj, varObjRaw: contract.addressVars})
+    // address vars
+    for(let addrVar of varObj.SAV.filter(e => {return Utils.isVarAllowed(e.name)})){
       let getterSignature = web3[0].eth.abi.encodeFunctionSignature(addrVar.name + "()")
       varsCalls.push([contract.address, getterSignature])
-      contractsWIP.push({isMap: 0 ,cAddr: contract.address, cID: contract.ID, varName: addrVar.name, sig: getterSignature}) // to link back results from contract calls
+      contractsWIP.push({type: 'var', cAddr: contract.address, cID: contract.ID, varName: addrVar.name, sig: getterSignature}) // to link back results from contract calls
     }
-    for(let addrVar of varObj.SAM){
+    // address arrays
+    for(let addrVar of varObj.SAA.filter(e => {return Utils.isVarAllowed(e.name)})){
+      let getterSignature = web3[0].eth.abi.encodeFunctionSignature(addrVar.name + "(uint256)")
+      arrCalls.push([contract.address, getterSignature])
+      contractsWIP.push({type: 'arr', cAddr: contract.address, cID: contract.ID, varName: addrVar.name, sig: getterSignature}) // to link back results from contract calls
+    }
+    // (uint => address) mappings
+    for(let addrVar of varObj.SAM.filter(e => {return Utils.isMapAllowed(e.name)})){
       let getterSignature = web3[0].eth.abi.encodeFunctionSignature(addrVar.name + "(" + addrVar.uintSize + ")")
       mapCalls.push([contract.address, getterSignature])
-      contractsWIP.push({isMap: 1 ,cAddr: contract.address, cID: contract.ID, mapName: addrVar.name, sig: getterSignature}) // to link back results from contract calls
+      contractsWIP.push({type: 'map', cAddr: contract.address, cID: contract.ID, varName: addrVar.name, sig: getterSignature}) // to link back results from contract calls
     }
   }
 
   // call aggregator contract
-  let varsResponse = [], mapResponse = []
+  let varsResponse = [], arrResponse = [], mapResponse = []
   if(varsCalls.length){
     let _varsResponse = await callContract("getVarValue", varsCalls)
     if(!_varsResponse){ // a call is failing, gotta identify it from the batch
@@ -128,29 +137,56 @@ async function refreshBatch(){
     else
       mapResponse = _mapResponse
   }
+  if(arrCalls.length){
+    let _arrResponse = await callContract("getMappingValue", arrCalls)
+    if(!_arrResponse){ // a call is failing, gotta identify it from the batch
+      for(ac of arrCalls){
+        _arrResponse = await callContract("getMappingValue", [ac])
+        if(_arrResponse)
+        arrResponse.push(_arrResponse)
+        else{
+          console.log("Found bad call, set as []")
+          arrResponse.push([ac[0], ac[1], []])
+        }
+      }
+    }
+    else
+    arrResponse = _arrResponse
+  }
 
   // parse results
-  for(vr of [...varsResponse, ...mapResponse]){
+  for(vr of [...varsResponse, ...mapResponse, ...arrResponse]){
     for(cw of contractsWIP){
-      if(cw.cAddr == vr[0] && cw.sig == vr[1]){
+      if(cw.cAddr.toLowerCase() == vr[0].toLowerCase() && cw.sig == vr[1]){
         let vName = cw.varName
         let vVal = cleanNullAddress(vr[2])
         for(let i=0; i< _contractsWIP.length; i++){
           if(_contractsWIP[i].cID == cw.cID){
-            if(cw.isMap){
+            if(cw.type == 'map'){
               for(let j=0; j<_contractsWIP[i].varObj.SAM.length; j++){
                 if(_contractsWIP[i].varObj.SAM[j].name == vName){
                   _contractsWIP[i].varObj.SAM[j].val = vVal
                   break
                 }
               }
-            } else{
+            } else if(cw.type == 'var'){
               for(let j=0; j<_contractsWIP[i].varObj.SAV.length; j++){
                 if(_contractsWIP[i].varObj.SAV[j].name == vName){
                   _contractsWIP[i].varObj.SAV[j].val = vVal
                   break
                 }
               }
+            } else if(cw.type == 'arr'){
+              for(let j=0; j<_contractsWIP[i].varObj.SAA.length; j++){
+                if(_contractsWIP[i].varObj.SAA[j].name == vName){
+                  _contractsWIP[i].varObj.SAA[j].val = vVal
+                  break
+                }
+              }
+            }
+            else{
+              console.log("dafuq inspect")
+              process.exit()
             }
             break
           }
@@ -162,7 +198,8 @@ async function refreshBatch(){
 
   // update database values
   for(let _cw of _contractsWIP){
-    await mysql.updateAddressVars(dbConn, _cw.cID, JSON.stringify(_cw.varObj))
+    let toWrite = JSON.stringify(_cw.varObj)
+    await mysql.updateAddressVars(dbConn, _cw.cID, toWrite, toWrite != _cw.varObjRaw)
     readContracts++
     if(readContracts % 500 == 0)
       console.log("calls: " + callsPerformed + " - contracts read: " + readContracts)

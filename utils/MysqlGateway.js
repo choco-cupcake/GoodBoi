@@ -2,18 +2,20 @@ const Database = require('./DB')
 const Utils = require('./Utils')
 const Crypto = require('crypto')
 
-async function updateAddressVars(conn, cID, addrVars){
-  let query = "UPDATE contract SET addressVars = ?, varsUpdatedAt = NOW() WHERE ID = ?;"
+async function updateAddressVars(conn, cID, addrVars, areChanged){
+  let updSubQ = areChanged ? ", varsUpdatedAt = NOW(), addressVars = ? " : ""
+  let queryParams = areChanged ? [addrVars, cID] : [cID]
+  let query = "UPDATE contract SET varsCheckedAt = NOW()" + updSubQ + " WHERE ID = ?;"
   try{
-    let [data, fields] = await conn.query(query, [addrVars, cID]);
+    let [data, fields] = await conn.query(query, queryParams);
     if(!data.affectedRows){
-      Utils.printQueryError(query, [addrVars, cID], "Error updating addressVars")
+      Utils.printQueryError(query, queryParams, "Error updating addressVars")
       return false
     }
     return true
   }
   catch(e){
-    Utils.printQueryError(query, [addrVars, cID], "Error updating addressVars - " + e.message)
+    Utils.printQueryError(query, queryParams, "Error updating addressVars - " + e.message)
     return false
   }
 }
@@ -22,7 +24,7 @@ async function getBatchVarsToRead(conn, chain){
   const batchLen = process.env.STATE_VARS_BATCH_LEN
   const daysRefresh = process.env.STATE_VARS_REFRESH_DAYS
   const waitDays = process.env.STATE_VARS_WAIT_DAYS
-  let query = "SELECT ID, address, addressVars FROM `contract` WHERE `chain`=? AND addressVars IS NOT NULL AND DATE_SUB(NOW(), INTERVAL ? DAY) > dateFound AND (DATE_SUB(NOW(), INTERVAL ? DAY) > varsUpdatedAt OR varsUpdatedAt IS NULL) LIMIT ?;"
+  let query = "SELECT ID, address, addressVars FROM `contract` WHERE `chain`=? AND addressVars IS NOT NULL AND DATE_SUB(NOW(), INTERVAL ? DAY) > dateFound AND (DATE_SUB(NOW(), INTERVAL ? DAY) > varsCheckedAt OR varsCheckedAt IS NULL) LIMIT ?;"
   try{
     let [data, fields] = await conn.query(query, [chain, waitDays, daysRefresh, Number(batchLen)])
     return data

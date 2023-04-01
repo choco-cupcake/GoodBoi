@@ -156,6 +156,8 @@ async function refreshBatch(){
 
   // parse results
   for(vr of [...varsResponse, ...mapResponse, ...arrResponse]){
+    if(!vr || vr.length != 3 || !vr[0] || !vr[1] || !vr[2])
+      continue
     for(cw of contractsWIP){
       if(cw.cAddr.toLowerCase() == vr[0].toLowerCase() && cw.sig == vr[1]){
         let vName = cw.varName

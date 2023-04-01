@@ -608,9 +608,9 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
   let stateVarsObj = Utils.getAddressVars(contractObj.SourceCode, contractObj.ContractName)
 
   // create contract record
-  let queryFields = ["chain", "address", "contractName", "compilerVersion", "compilerVersion_int", "optimizationUsed", "runs", "constructorArguments", "EVMVersion", "library", "licenseType", "proxy", "implementation", "swarmSource"]
+  let queryFields = ["chain", "address", "contractName", "compilerVersion", "compilerVersion_int", "optimizationUsed", "runs", "constructorArguments", "EVMVersion", "library", "licenseType", "proxy", "implementation"]
   let queryParams = [chain, contractAddress, contractObj.ContractName, contractObj.CompilerVersion, contractObj.CompilerVersion_int, contractObj.OptimizationUsed, contractObj.Runs, 
-    contractObj.ConstructorArguments,contractObj.EVMVersion, contractObj.Library, contractObj.LicenseType, contractObj.Proxy, contractObj.Implementation, contractObj.SwarmSource]
+    contractObj.ConstructorArguments,contractObj.EVMVersion, contractObj.Library, contractObj.LicenseType, contractObj.Proxy, contractObj.Implementation]
   if(stateVarsObj){ // no addr vars/mappings found, leave default NULL
     queryFields.push("addressVars")
     queryParams.push(JSON.stringify(stateVarsObj))

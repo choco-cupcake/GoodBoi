@@ -69,8 +69,9 @@ async function getBatchProxiesToRead(conn, chain){
   }
 }
 
-async function updateAddressVars(conn, cID, addrVars, areChanged){
-  let updSubQ = areChanged ? ", varsUpdatedAt = NOW(), addressVars = ? " : ""
+async function updateAddressVars(conn, cID, addrVars, areChanged, isImpl = false){
+  let field = isImpl ? "implAddressVars" : "addressVars"
+  let updSubQ = areChanged ? ", varsUpdatedAt = NOW(), " + field + " = ? " : ""
   let queryParams = areChanged ? [addrVars, cID] : [cID]
   let query = "UPDATE contract SET varsCheckedAt = NOW()" + updSubQ + " WHERE ID = ?;"
   try{
@@ -91,7 +92,12 @@ async function getBatchVarsToRead(conn, chain){
   const batchLen = process.env.STATE_VARS_BATCH_LEN
   const daysRefresh = process.env.STATE_VARS_REFRESH_DAYS
   const waitDays = process.env.STATE_VARS_WAIT_DAYS
-  let query = "SELECT ID, address, addressVars FROM `contract` WHERE `chain`=? AND addressVars IS NOT NULL AND DATE_SUB(NOW(), INTERVAL ? DAY) > dateFound AND (DATE_SUB(NOW(), INTERVAL ? DAY) > varsCheckedAt OR varsCheckedAt IS NULL) LIMIT ?;"
+  let query = `SELECT c1.ID, c1.address, c1.addressVars, c1.implAddress, c2.addressVars AS "implVars" FROM contract AS c1 
+  LEFT JOIN contract AS c2 ON c1.chain=c2.chain AND c1.implAddress = c2.address
+  WHERE c1.chain = ?
+  AND (c1.addressVars IS NOT NULL OR (c1.implAddress IS NOT NULL AND c1.implAddress != "0x0" AND c2.addressVars IS NOT NULL))
+  AND DATE_SUB(NOW(), INTERVAL ? DAY) > c1.dateFound 
+  AND (DATE_SUB(NOW(), INTERVAL ? DAY) > c1.varsCheckedAt OR c1.varsCheckedAt IS NULL) LIMIT 1000;`
   try{
     let [data, fields] = await conn.query(query, [chain, waitDays, daysRefresh, Number(batchLen)])
     return data

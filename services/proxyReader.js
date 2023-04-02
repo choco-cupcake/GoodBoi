@@ -8,6 +8,7 @@ const batchLen = process.env.PROXIES_BATCH_LEN
 let aggregatorContract = [] 
 let web3Index = 0
 let web3 = []
+let doneCount = 0, readCount = 0
 
 let contractPool
 program
@@ -79,8 +80,14 @@ async function refreshBatch(){
         console.log(e)
       }
     }
-    await mysql.updateProxyImplAddress(dbConn, contract.ID, addressImpl, addressImpl != contract.implAddress)
-    console.log("Done " + contract.ID + " : " + addressImpl)
+    if(addressImpl == "0x0000000000000000000000000000000000000000") 
+      addressImpl = "0x0"
+    if(addressImpl != "0x0")
+      readCount++
+    doneCount++
+    await mysql.updateProxyImplAddress(dbConn, cliOptions.chain, contract.ID, addressImpl, addressImpl != contract.implAddress)
+    if(doneCount % 10 == 0)
+      console.log("Done " + doneCount + " - " + readCount + " implementations found")
     await Utils.sleep(200) // not much volume, can be spread to be graceful on RPC endpoints
   }
 }

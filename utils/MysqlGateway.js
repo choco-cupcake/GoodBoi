@@ -30,7 +30,7 @@ async function getFromCache(conn, tag){
   }
 }
 
-async function updateProxyImplAddress(conn, cID, implAddress, isChanged){
+async function updateProxyImplAddress(conn, chain, cID, implAddress, isChanged){
   let updSubQ = isChanged ? ", implUpdatedAt = NOW(), implAddress = ? " : ""
   let queryParams = isChanged ? [implAddress, cID] : [cID]
   let query = "UPDATE contract SET implCheckedAt = NOW()" + updSubQ + " WHERE ID = ?;"
@@ -39,6 +39,12 @@ async function updateProxyImplAddress(conn, cID, implAddress, isChanged){
     if(!data.affectedRows){
       Utils.printQueryError(query, queryParams, "Error updating implAddress")
       return false
+    }
+    if(isChanged && implAddress != "0x0"){ // add address to DB if not yet parsed
+      if(!await getFromParsedPool(conn, chain, implAddress, true)){
+        await pushAddressToParsedTable(conn, chain, addr)
+        await pushAddressToPoolTable(conn, chain, addr, 'addresspool', true)
+      }
     }
     return true
   }
@@ -886,11 +892,11 @@ async function performInsertQuery(conn, query, params, suppressError = false, is
   }
 }
 
-async function getFromParsedPool(conn, chain, address){
+async function getFromParsedPool(conn, chain, address, bypassRecheck = false){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
-  let toRefreshSubQuery = process.env.UNVERIFIED_RECHECK_ENABLED == 1 ? "(verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() )" : "'0'"
+  let toRefreshSubQuery = (process.env.UNVERIFIED_RECHECK_ENABLED == 1 && !bypassRecheck) ? "(verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() )" : "'0'"
   let query = "SELECT *, " + toRefreshSubQuery + " as toRefresh, verified FROM " + parsedTable + " WHERE address = ?"
-  let queryParams = process.env.UNVERIFIED_RECHECK_ENABLED == 1 ? [process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS, address] : [address]
+  let queryParams = (process.env.UNVERIFIED_RECHECK_ENABLED == 1 && !bypassRecheck) ? [process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS, address] : [address]
   try{
     let [data, fields] = await conn.query(query, queryParams);
     return data

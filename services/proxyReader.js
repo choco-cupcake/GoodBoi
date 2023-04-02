@@ -53,7 +53,7 @@ function bootstrapWeb3(){
 }
 
 async function refreshVarsValues(){ 
-  console.log("Vars values update started")
+  console.log("Proxy Implementation addresses values update started")
 	for(let i=0; i<parallelCrawlers; i++){
     refreshBatch()
 	}
@@ -81,6 +81,7 @@ async function refreshBatch(){
     }
     await mysql.updateProxyImplAddress(dbConn, contract.ID, addressImpl, addressImpl != contract.implAddress)
     console.log("Done " + contract.ID + " : " + addressImpl)
+    await Utils.sleep(200) // not much volume, can be spread to be graceful on RPC endpoints
   }
 }
 

@@ -71,7 +71,11 @@ async function refreshVarsValues(){
 async function refreshBatch(){
   while(contractPool.length){
     let contract = contractPool.pop()
-    let rawSlotValue = await getWeb3RoundRobin().eth.getStorageAt(contract.address, '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc');
+    let rawSlotValue = '0x0000000000000000000000000000000000000000000000000000000000000000'
+    try{
+      rawSlotValue = await getWeb3RoundRobin().eth.getStorageAt(contract.address, '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc');
+    }
+    catch(e){}
     let addressImpl = "0x0"
     if(rawSlotValue != '0x0000000000000000000000000000000000000000000000000000000000000000') {
       try{

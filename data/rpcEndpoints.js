@@ -6,7 +6,7 @@ const endpoints = {
                   "https://ethereum.publicnode.com",
                   "https://rpc.ankr.com/eth",
                   "https://eth.rpc.blxrbdn.com",
-                  "https://cloudflare-eth.com",
+                  "https://eth-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_API_KEY,
                   "https://ethereum.blockpi.network/v1/rpc/public",
                   "https://rpc.payload.de",],
   "BSC_MAINNET" : ["https://rpc.ankr.com/bsc", 

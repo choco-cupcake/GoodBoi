@@ -2,6 +2,67 @@ const Database = require('./DB')
 const Utils = require('./Utils')
 const Crypto = require('crypto')
 
+async function updateCache(conn, tag, value){
+  let query = "UPDATE cache SET value = ?, datareg = NOW() WHERE tag = ?"
+  try{
+    let [data, fields] = await conn.query(query, [value, tag])
+    if(!data.affectedRows){
+      console.log("ERROR - Can't update tag " + tag + " in cache")
+    }
+  }
+  catch(e){
+    console.log("ERROR - Can't update tag " + tag + " in cache", e.message)
+  }
+}
+
+async function getFromCache(conn, tag){
+  let query = "SELECT value FROM cache WHERE tag = ? AND datareg + INTERVAL expire_minutes MINUTE > NOW()"
+  try{
+    let [data, fields] = await conn.query(query, tag)
+    if(!data.length){
+      return null
+    }
+    return data[0].value
+  }
+  catch(e){
+    console.log("ERROR - Can't get tag " + tag + " from cache", e.message)
+    return null
+  }
+}
+
+async function updateProxyImplAddress(conn, cID, implAddress, isChanged){
+  let updSubQ = isChanged ? ", implUpdatedAt = NOW(), implAddress = ? " : ""
+  let queryParams = isChanged ? [implAddress, cID] : [cID]
+  let query = "UPDATE contract SET implCheckedAt = NOW()" + updSubQ + " WHERE ID = ?;"
+  try{
+    let [data, fields] = await conn.query(query, queryParams);
+    if(!data.affectedRows){
+      Utils.printQueryError(query, queryParams, "Error updating implAddress")
+      return false
+    }
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, queryParams, "Error updating implAddress - " + e.message)
+    return false
+  }
+}
+
+async function getBatchProxiesToRead(conn, chain){
+  const batchLen = process.env.PROXIES_BATCH_LEN
+  const daysRefresh = process.env.PROXIES_REFRESH_DAYS
+  const waitDays = process.env.PROXIES_WAIT_DAYS
+  let query = "SELECT ID, address, implAddress FROM `contract` WHERE `chain`=? AND (contractName LIKE '%proxy%' OR proxy = 1) AND contractName != 'GnosisSafeProxy' AND DATE_SUB(NOW(), INTERVAL ? DAY) > dateFound AND (DATE_SUB(NOW(), INTERVAL ? DAY) > implCheckedAt OR implCheckedAt IS NULL) LIMIT ?;"
+  try{
+    let [data, fields] = await conn.query(query, [chain, waitDays, daysRefresh, Number(batchLen)])
+    return data
+  }
+  catch(e){
+    console.log("ERROR - Can't get batch vars to read", e.message)
+    return null
+  }
+}
+
 async function updateAddressVars(conn, cID, addrVars, areChanged){
   let updSubQ = areChanged ? ", varsUpdatedAt = NOW(), addressVars = ? " : ""
   let queryParams = areChanged ? [addrVars, cID] : [cID]
@@ -844,4 +905,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

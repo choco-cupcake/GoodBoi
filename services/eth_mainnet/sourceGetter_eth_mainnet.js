@@ -152,7 +152,12 @@ async function getRawSource(address){
 	let url = "https://api.etherscan.io/api?module=contract&action=getsourcecode&address=" + address + "&apikey=" + process.env.ETHERSCAN_API
 	try {
 		const response = await axios.get(url);
-		return response?.data?.result && response?.data?.result.length ? response?.data?.result[0] : null;
+		if(response?.data?.result && response?.data?.result.length){
+			if(Array.isArray(response?.data?.result)) 
+				return response?.data?.result[0]
+			console.log(response?.data?.result)
+		}
+		return null
 	}
 	catch (error) {
 		console.log(error);

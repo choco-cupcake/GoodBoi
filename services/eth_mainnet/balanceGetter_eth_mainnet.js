@@ -7,7 +7,7 @@ const Web3 = require("web3")
 const web3 = new Web3("wss://mainnet.infura.io/ws/v3/" + process.env.INFURA_API_KEY);
 const chain = Utils.chains.ETH_MAINNET
 
-const ERC20_of_interest = require("../../data/ERC20_of_interest")[chain];
+let ERC20_of_interest = require("../../data/ERC20_of_interest")[chain];
 const priceAggregatorABI = '[{"constant":true,"inputs":[{"name":"user","type":"address"},{"name":"token","type":"address"}],"name":"tokenBalance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"users","type":"address[]"},{"name":"tokens","type":"address[]"}],"name":"balances","outputs":[{"name":"","type":"uint256[]"}],"payable":false,"stateMutability":"view","type":"function"},{"payable":true,"stateMutability":"payable","type":"fallback"}]'
 const priceAggregatorAddress = "0xb1f8e55c7f64d203c1400b9d8555d050f94adf39"
 const aggrAddrPerTime = process.env.AGGREGATED_ADDRESS_SIZE
@@ -116,6 +116,17 @@ async function getAggregatedHoldings(addresses){
 }
 
 async function getAllQuotes(){
+  let quotes = await mysql.getFromCache(dbConn, "ERC20_" + chain)
+  if(quotes){
+    ERC20_of_interest = JSON.parse(quotes)
+    console.log("ERC20 prices got from cache")
+  } else{
+    await _getAllQuotes()
+    await mysql.updateCache(dbConn, "ERC20_" + chain, JSON.stringify(ERC20_of_interest))
+  }
+}
+
+async function _getAllQuotes(){
   console.log("Getting ERC20 quotes");
   for(let i=1; i < ERC20_of_interest.length; i++){ // skip native ETH. kept in the same struct bc price aggregator contract accepts it
     let r = await moralisGetPriceUSD(ERC20_of_interest[i].address)

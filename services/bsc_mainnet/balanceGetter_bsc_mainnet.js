@@ -8,7 +8,7 @@ const Web3 = require("web3")
 const rpcEndpoints = require("../../data/rpcEndpoints")[chain]
 let web3 = [], web3Index = 0
 
-const ERC20_of_interest = require("../../data/ERC20_of_interest")[chain];
+let ERC20_of_interest = require("../../data/ERC20_of_interest")[chain];
 const priceAggregatorABI = '[{"constant":true,"inputs":[{"name":"user","type":"address"},{"name":"token","type":"address"}],"name":"tokenBalance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"users","type":"address[]"},{"name":"tokens","type":"address[]"}],"name":"balances","outputs":[{"name":"","type":"uint256[]"}],"payable":false,"stateMutability":"view","type":"function"},{"payable":true,"stateMutability":"payable","type":"fallback"}]'
 const priceAggregatorAddress = "0xdb42bc817af649e66937c2683b7b422f8d86ef58"
 let aggregatorContract = [] 
@@ -125,6 +125,18 @@ async function getAggregatedHoldings(addresses){
 }
 
 async function getAllQuotes(){
+  let quotes = await mysql.getFromCache(dbConn, "ERC20_" + chain)
+  if(quotes){
+    ERC20_of_interest = JSON.parse(quotes)
+    console.log("ERC20 prices got from cache")
+  } else{
+    await _getAllQuotes()
+    await mysql.updateCache(dbConn, "ERC20_" + chain, JSON.stringify(ERC20_of_interest))
+  }
+}
+
+async function _getAllQuotes(){
+
   console.log("Getting ERC20 quotes");
   for(let i=1; i < ERC20_of_interest.length; i++){ // skip native ETH. kept in the same struct bc price aggregator contract accepts it
     let r = await moralisGetPriceUSD(ERC20_of_interest[i].address)

@@ -204,7 +204,7 @@ async function refreshBatch(){
       let toWrite = JSON.stringify(_cw.varObj)
       await mysql.updateAddressVars(dbConn, _cw.cID, toWrite, toWrite != _cw.varObjRaw)
       readContracts++
-      if(readContracts % 500 == 0)
+      if(readContracts % 10 == 0)
         console.log("calls: " + callsPerformed + " - contracts read: " + readContracts)
     }
   }
@@ -234,7 +234,7 @@ function cleanNullAddress(addr){
   return addr == "0x0000000000000000000000000000000000000000" ? "0x0" : addr
 }
 async function checkAndFill() {
-	if(contractPool.length < parallelCrawlers * 50){ // margin for concurrency
+	if(contractPool.length < parallelCrawlers * maxReadsPerTx * 50){ // margin for concurrency
     contractPool = await mysql.getBatchVarsToRead(dbConn, cliOptions.chain)
     if(contractPool.length < batchLen){
       clearInterval(refillInterval)

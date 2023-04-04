@@ -9,6 +9,7 @@ const maxReadsPerTx = process.env.MAX_READS_PER_TX
 let WETHPrice, minPoolWETH
 let aggregatorContract = [] 
 let flaggerContract = [] 
+let web3IndexLastLoop = 0
 let web3Index = 0
 let web3 = []
 
@@ -385,7 +386,8 @@ async function checkAndFill() {
   }
 }
 
-function getAggregatorContractRoundRobin(){ // round robin
+async function getAggregatorContractRoundRobin(){ // round robin
+  await loopWeb3SleepCheck()
   callsPerformed++
   if(aggregatorContract.length == 1) return aggregatorContract[0]
   let ret = aggregatorContract[web3Index]
@@ -393,10 +395,22 @@ function getAggregatorContractRoundRobin(){ // round robin
   return ret
 }
 
-function getFlaggerContractRoundRobin(){ // round robin
+async function getFlaggerContractRoundRobin(){ // round robin
+  await loopWeb3SleepCheck()
   callsPerformed++
   if(flaggerContract.length == 1) return flaggerContract[0]
   let ret = flaggerContract[web3Index]
   web3Index = ++web3Index % web3.length
   return ret
+}
+
+async function loopWeb3SleepCheck(){
+  if(web3Index == 0){
+    let elapsed = Date.now() - web3IndexLastLoop
+    if(elapsed < 1000){
+      await Utils.sleep(500 - elapsed)
+    }
+    web3IndexLastLoop = Date.now()
+  }
+
 }

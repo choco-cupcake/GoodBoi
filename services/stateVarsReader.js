@@ -350,12 +350,12 @@ async function callContract(contract, method, params){
   while(fail < aggregatorContract.length){ // try all rpc
     try{
       if(contract == "aggregator")
-        return await getAggregatorContractRoundRobin().methods[method](params).call()
+        return await (await getAggregatorContractRoundRobin()).methods[method](params).call()
       else if(contract == "flagger"){
         if(Array.isArray(params))
-          return await getFlaggerContractRoundRobin().methods[method](...params).call()
+          return await (await getFlaggerContractRoundRobin()).methods[method](...params).call()
         else
-          return await getFlaggerContractRoundRobin().methods[method](params).call()
+          return await (await getFlaggerContractRoundRobin()).methods[method](params).call()
       }
         
       else{

@@ -23,8 +23,6 @@ program
 program.parse();
 const cliOptions = program.opts();
 
-cliOptions.chain = "POLYGON" // =======================================
-
 if(!Object.values(Utils.chains).includes(cliOptions.chain)){
   console.log("Unrecognized chain, abort.")
   process.exit()

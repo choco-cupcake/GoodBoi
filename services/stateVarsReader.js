@@ -1,17 +1,20 @@
 const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');
+const BigNumber = require('bignumber.js');
 const Web3 = require("web3")
 const { program } = require('commander');
 const aggregatorABI = '[{"inputs":[{"components":[{"internalType":"address","name":"contractAddress","type":"address"},{"internalType":"bytes4","name":"getterSelector","type":"bytes4"}],"internalType":"struct GetValueAggregator.InputObj[]","name":"input","type":"tuple[]"}],"name":"getMappingValue","outputs":[{"components":[{"internalType":"address","name":"contractAddress","type":"address"},{"internalType":"bytes4","name":"getterSelector","type":"bytes4"},{"internalType":"address[]","name":"readVal","type":"address[]"}],"internalType":"struct GetValueAggregator.OutputMappingObj[]","name":"","type":"tuple[]"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"components":[{"internalType":"address","name":"contractAddress","type":"address"},{"internalType":"bytes4","name":"getterSelector","type":"bytes4"}],"internalType":"struct GetValueAggregator.InputObj[]","name":"input","type":"tuple[]"}],"name":"getVarValue","outputs":[{"components":[{"internalType":"address","name":"contractAddress","type":"address"},{"internalType":"bytes4","name":"getterSelector","type":"bytes4"},{"internalType":"address","name":"readVal","type":"address"}],"internalType":"struct GetValueAggregator.OutputVariableObj[]","name":"","type":"tuple[]"}],"stateMutability":"nonpayable","type":"function"}]'
+const flaggerABI = '[{"inputs": [{"components": [{"internalType": "address","name": "_contract","type": "address"},{"internalType": "address[]","name": "internalAddresses","type": "address[]"}],"internalType": "struct PolygonFlagger.Input[]","name": "contracts","type": "tuple[]"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"}],"name": "areInterestingContract","outputs": [{"components": [{"internalType": "address","name": "_contract","type": "address"},{"internalType": "uint8","name": "flag","type": "uint8"}],"internalType": "struct PolygonFlagger.Output[]","name": "","type": "tuple[]"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "inpAddr","type": "address"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"}],"name": "hasPool","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "inpAddr","type": "address"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"}],"name": "hasPoolQuickswap","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "inpAddr","type": "address"}],"name": "hasPoolUniV3","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "inpAddr","type": "address"}],"name": "isERC20","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "mainContract","type": "address"},{"internalType": "address[]","name": "internalAddresses","type": "address[]"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"},{"internalType": "uint256","name": "_gasMargin","type": "uint256"}],"name": "isInterestingContract","outputs": [{"internalType": "uint8","name": "","type": "uint8"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "inpAddr","type": "address"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"}],"name": "isPool","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "pool","type": "address"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"}],"name": "isPoolQuickswap","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "poolAddr","type": "address"}],"name": "isUniswapV3Pool","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"anonymous": false,"inputs": [{"indexed": true,"internalType": "address","name": "previousOwner","type": "address"},{"indexed": true,"internalType": "address","name": "newOwner","type": "address"}],"name": "OwnershipTransferred","type": "event"},{"inputs": [],"name": "renounceOwnership","outputs": [],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "uint256","name": "gm","type": "uint256"}],"name": "setGasMargin","outputs": [],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "newOwner","type": "address"}],"name": "transferOwnership","outputs": [],"stateMutability": "nonpayable","type": "function"},{"inputs": [],"name": "owner","outputs": [{"internalType": "address","name": "","type": "address"}],"stateMutability": "view","type": "function"}]'
 const maxReadsPerTx = process.env.MAX_READS_PER_TX
-const parallelCrawlers = process.env.STATE_VARS_PARALLEL_CRAWLERS
-const batchLen = process.env.STATE_VARS_BATCH_LEN
+let WETHPrice, minPoolWETH
 let aggregatorContract = [] 
+let flaggerContract = [] 
 let web3Index = 0
 let web3 = []
 
 let callsPerformed = 0
 let readContracts = 0
+let flaggedCount = 0
 
 let contractPool
 program
@@ -19,6 +22,8 @@ program
 
 program.parse();
 const cliOptions = program.opts();
+
+cliOptions.chain = "POLYGON" // =======================================
 
 if(!Object.values(Utils.chains).includes(cliOptions.chain)){
   console.log("Unrecognized chain, abort.")
@@ -34,10 +39,10 @@ async function main(){
   console.log("loop started")
   bootstrapWeb3()
   dbConn = await mysql.getDBConnection()
+  await getWETHPrice()
   contractPool = await mysql.getBatchVarsToRead(dbConn, cliOptions.chain)
   let start = Date.now()
   if(contractPool.length){
-    refillInterval = setInterval(checkAndFill, 1500)
     await refreshVarsValues()
   }
   else 
@@ -50,27 +55,25 @@ async function main(){
 	main()
 }
 
+async function getWETHPrice(){
+  let ERC20PricesCached = JSON.parse(await mysql.getFromCache(dbConn,"ERC20_" + cliOptions.chain))
+  WETHPrice = ERC20PricesCached[0].USD_price
+  minPoolWETH = new BigNumber(process.env.FLAGGER_CONTRACT_MIN_POOL_USD).times(new BigNumber(10).exponentiatedBy(ERC20PricesCached[0].decimals)).div(WETHPrice).toFixed(0) // only used for UniV2 pools
+}
+
 function bootstrapWeb3(){
   let priceAggregatorAddress = process.env["STATE_VARS_AGGREGATOR_" + cliOptions.chain]
+  let flaggerAddress = process.env["FLAGGER_CONTRACT_" + cliOptions.chain]
   for(let endp of rpcEndpoints){
     web3.push(new Web3(endp))
     aggregatorContract.push(new web3[web3.length - 1].eth.Contract(JSON.parse(aggregatorABI), priceAggregatorAddress))
+    flaggerContract.push(new web3[web3.length - 1].eth.Contract(JSON.parse(flaggerABI), flaggerAddress))
   }
 }
 
 async function refreshVarsValues(){ 
   console.log("Vars values update started")
-	for(let i=0; i<parallelCrawlers; i++){
-    refreshBatch()
-	}
-  return new Promise((resolve, reject) =>{
-    let intervalCheck = setInterval(() => {
-      if(!contractPool.length){
-        clearInterval(intervalCheck); 
-        resolve();
-      }
-    }, 1000)
-  })
+	await refreshBatch() // parallel crawlers not needed
 }
 
 async function refreshBatch(){
@@ -84,7 +87,7 @@ async function refreshBatch(){
       let contract = contractPool.pop()
       let varObj = JSON.parse(contract.addressVars)
       let implVarObj = contract.implVars == "NULL" ? null : JSON.parse(contract.implVars)
-      _contractsWIP.push({cID: contract.ID, varObj: varObj, varObjRaw: contract.addressVars, implVarObj: implVarObj, implVarObjRaw: contract.implVars})
+      _contractsWIP.push({cID: contract.ID, contractAddress: contract.address, varObj: varObj, varObjRaw: contract.addressVars, implVarObj: implVarObj, implVarObjRaw: contract.implVars})
       // ==== addressVars
       if(varObj){
         // address vars
@@ -132,10 +135,10 @@ async function refreshBatch(){
     // call aggregator contract
     let varsResponse = [], arrResponse = [], mapResponse = []
     if(varsCalls.length){
-      let _varsResponse = await callContract("getVarValue", varsCalls)
+      let _varsResponse = await callContract("aggregator", "getVarValue", varsCalls)
       if(!_varsResponse){ // a call is failing, gotta identify it from the batch
         for(vc of varsCalls){
-          _varsResponse = await callContract("getVarValue", [vc])
+          _varsResponse = await callContract("aggregator", "getVarValue", [vc])
           if(_varsResponse)
             varsResponse.push(_varsResponse)
           else{
@@ -148,10 +151,10 @@ async function refreshBatch(){
         varsResponse = _varsResponse
     }
     if(mapCalls.length){
-      let _mapResponse = await callContract("getMappingValue", mapCalls)
+      let _mapResponse = await callContract("aggregator", "getMappingValue", mapCalls)
       if(!_mapResponse){ // a call is failing, gotta identify it from the batch
         for(mp of mapCalls){
-          _mapResponse = await callContract("getMappingValue", [mp])
+          _mapResponse = await callContract("aggregator", "getMappingValue", [mp])
           if(_mapResponse)
             mapResponse.push(_mapResponse)
           else{
@@ -164,10 +167,10 @@ async function refreshBatch(){
         mapResponse = _mapResponse
     }
     if(arrCalls.length){
-      let _arrResponse = await callContract("getMappingValue", arrCalls)
+      let _arrResponse = await callContract("aggregator", "getMappingValue", arrCalls)
       if(!_arrResponse){ // a call is failing, gotta identify it from the batch
         for(ac of arrCalls){
-          _arrResponse = await callContract("getMappingValue", [ac])
+          _arrResponse = await callContract("aggregator", "getMappingValue", [ac])
           if(_arrResponse)
           arrResponse.push(_arrResponse)
           else{
@@ -225,32 +228,140 @@ async function refreshBatch(){
       }
     }
 
+    // checks if contracts have to be flagged ad updates the object
+    await checkFlags(_contractsWIP)
+
     // update database values
     for(let _cw of _contractsWIP){
-      let toWrite
-      if(_cw.varObj){
-        toWrite = JSON.stringify(_cw.varObj)
-        await mysql.updateAddressVars(dbConn, _cw.cID, toWrite, toWrite != _cw.varObjRaw)
-      }
-      if(_cw.implVarObj){
-        toWrite = JSON.stringify(_cw.implVarObj)
-        await mysql.updateAddressVars(dbConn, _cw.cID, toWrite, toWrite != _cw.implVarObjRaw, true)
+      let toWrite = _cw.varObj ? JSON.stringify(_cw.varObj) : null
+      let toWriteImpl = _cw.implVarObj ? JSON.stringify(_cw.implVarObj) : null
+      if(toWrite || toWriteImpl){
+        await mysql.updateAddressVars(dbConn, _cw.cID, _cw.flag, toWrite, toWrite ? toWrite != _cw.implVarObjRaw : null, toWriteImpl, toWriteImpl ? toWriteImpl != _cw.implVarObjRaw : null)
+        if(_cw.flag == '1')
+          flaggedCount++
       }
       readContracts++
-      if(readContracts % 10 == 0)
-        console.log("calls: " + callsPerformed + " - contracts read: " + readContracts)
+      if(readContracts % 10 == 0 || readContracts == _contractsWIP.length)
+        console.log("calls: " + callsPerformed + " - contracts read: " + readContracts + " - contracts flagged: " + flaggedCount)
     }
+
+    await checkAndFill()
   }
 }
 
-async function callContract(method, calls){
+async function checkFlags(_contractsWIP){
+  let calls = []
+
+    // rechecks even if vars did not change
+  for(let _cw of _contractsWIP){
+    let internalAddresses = []
+    if(_cw.varObj){ // "&& JSON.stringify(_cw.varObj) != _cw.varObjRaw" removed to take into account pool liquidity changes
+      pushToInternalAddresses(_cw.varObj, internalAddresses)
+    }
+    if(_cw.implVarObj){ 
+      pushToInternalAddresses(_cw.implVarObj, internalAddresses)
+    }
+    if(internalAddresses.length > 35){ // cap to 50 internal addresses
+      internalAddresses = internalAddresses.slice(0, 50)
+    }
+    calls.push({contractAddr: _cw.contractAddress, internalAddresses: internalAddresses})
+  }
+
+  while(calls.length){
+    // execute calls
+    let callResponse = []
+    let batch = [] // gasleft() contract feature not working ¯\_(ツ)_/¯
+    let intCount = 0 // internal addresses checks are more expensive (isPool + hasPool vs hasPool)
+    let maxAddrCount = 50
+    for(let c of calls){
+      batch.push(c)
+      intCount += c.internalAddresses.length + 1
+      if(intCount * 3 + batch.length > maxAddrCount)
+        break
+    }
+    let _callResponse = await callContract("flagger", "areInterestingContract", [callsToRawArray(batch), minPoolWETH])
+    if(!_callResponse){ // a call is failing, gotta identify it from the batch
+      for(let call of batch){
+        _callResponse = await callContract("flagger", "areInterestingContract", [callsToRawArray([call]), minPoolWETH])
+        if(_callResponse)
+          callResponse.push(_callResponse[0])
+        else{
+          console.log("Found bad call, setting to flagged")
+          callResponse.push([call.contractAddr, '1'])
+        }
+      }
+    }
+    else
+      callResponse = _callResponse
+
+    // parse results && update input object
+    for(let i=callResponse.length - 1; i>=0; i--){ // downward bc we pop elements
+      if(callResponse[i][1] == 2) // gas abort
+        continue
+      // assign flag to contracts and remove from calls list
+      for(let j=0;j<calls.length; j++){
+        if(calls[j].contractAddr.toLowerCase() == callResponse[i][0].toLowerCase()){
+          _contractsWIP[j]['flag'] = callResponse[i][1]
+          calls.splice(j, 1); 
+        }
+      }
+    }
+
+  }
+
+  // data consistency check
+  for(let _cw of _contractsWIP){
+    if(!_cw['flag']){
+      console.log("======= Inspect - Could not find flag for contract") // even if no vars, contractAddress must be checked
+      _cw['flag'] = 1
+    }
+  }
+
+}
+
+function callsToRawArray(callObj){
+  let retCalls = []
+  for(let co of callObj){
+    retCalls.push([co.contractAddr, co.internalAddresses])
+  }
+  return retCalls
+}
+
+function pushToInternalAddresses(_varObj, internalAddresses){
+  for(let sav of _varObj.SAV.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && e.val != "0x0"})){
+    internalAddresses.push(sav.val)
+  }
+  for(let sam of _varObj.SAM.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && e.val != "0x0"})){
+    for(let a of sam.val)
+      internalAddresses.push(a)
+  }
+  for(let saa of _varObj.SAA.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && e.val != "0x0"})){
+    for(let a of saa.val)
+      internalAddresses.push(a)
+  }
+  
+}
+
+async function callContract(contract, method, params){
   let fail = 0
   while(fail < aggregatorContract.length){ // try all rpc
     try{
-      return await getContractRoundRobin().methods[method](calls).call()
+      if(contract == "aggregator")
+        return await getAggregatorContractRoundRobin().methods[method](params).call()
+      else if(contract == "flagger"){
+        if(Array.isArray(params))
+          return await getFlaggerContractRoundRobin().methods[method](...params).call()
+        else
+          return await getFlaggerContractRoundRobin().methods[method](params).call()
+      }
+        
+      else{
+        console.log("unrecognized contract call - inspect issue")
+        process.exit()
+      }
     } catch(e){
       fail++
-      console.log("FAILED, fails: " + fail)
+      console.log("Failed contract call " + contract + ":" + method + ", " + e.message + " - fails: " + fail)
     }
   }
   return null
@@ -267,18 +378,23 @@ function cleanNullAddress(addr){
   return addr == "0x0000000000000000000000000000000000000000" ? "0x0" : addr
 }
 async function checkAndFill() {
-	if(contractPool.length < parallelCrawlers * maxReadsPerTx * 50){ // margin for concurrency
+	if(contractPool.length < maxReadsPerTx * 50){ // margin for concurrency
     contractPool = await mysql.getBatchVarsToRead(dbConn, cliOptions.chain)
-    if(contractPool.length < batchLen){
-      clearInterval(refillInterval)
-    }
   }
 }
 
-function getContractRoundRobin(){ // round robin
+function getAggregatorContractRoundRobin(){ // round robin
   callsPerformed++
   if(aggregatorContract.length == 1) return aggregatorContract[0]
   let ret = aggregatorContract[web3Index]
+  web3Index = ++web3Index % web3.length
+  return ret
+}
+
+function getFlaggerContractRoundRobin(){ // round robin
+  callsPerformed++
+  if(flaggerContract.length == 1) return flaggerContract[0]
+  let ret = flaggerContract[web3Index]
   web3Index = ++web3Index % web3.length
   return ret
 }

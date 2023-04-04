@@ -299,9 +299,13 @@ async function checkFlags(_contractsWIP){
       if(callResponse[i][1] == 2) // gas abort
         continue
       // assign flag to contracts and remove from calls list
-      for(let j=0;j<calls.length; j++){
+      for(let _cw of _contractsWIP){
+        if(_cw.contractAddress.toLowerCase() == callResponse[i][0].toLowerCase()){
+          _cw['flag'] = callResponse[i][1]
+        }
+      }
+      for(let j=0; j<calls.length; j++){
         if(calls[j].contractAddr.toLowerCase() == callResponse[i][0].toLowerCase()){
-          _contractsWIP[j]['flag'] = callResponse[i][1]
           calls.splice(j, 1); 
         }
       }

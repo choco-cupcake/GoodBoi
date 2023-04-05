@@ -6,7 +6,7 @@ const endpoints = {
                   "https://ethereum.publicnode.com",
                   "https://rpc.ankr.com/eth",
                   "https://eth.rpc.blxrbdn.com",
-                  "https://eth-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_API_KEY,
+                  "https://eth-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_ETHRPC_API_KEY,
                   "https://ethereum.blockpi.network/v1/rpc/public",
                   "https://rpc.payload.de",],
   "BSC_MAINNET" : ["https://rpc.ankr.com/bsc", 
@@ -24,14 +24,19 @@ const endpoints = {
                   "https://bsc-dataseed4.ninicoin.io", 
                   "https://bsc.rpc.blxrbdn.com", 
                   "https://bsc.blockpi.network/v1/rpc/public"],
-  "POLYGON" : ["https://polygon-rpc.com", 
-              "https://rpc.ankr.com/polygon",
-              "https://polygon.llamarpc.com",
-              "https://polygon.rpc.blxrbdn.com",
-              "https://polygon.blockpi.network/v1/rpc/public",
-              "https://polygon-mainnet.public.blastapi.io",
-              "https://poly-rpc.gateway.pokt.network",
-              "https://polygon-bor.publicnode.com"]
+    "POLYGON" : ["https://polygon-rpc.com", 
+                "https://rpc.ankr.com/polygon",
+                "https://polygon.llamarpc.com",
+                "https://polygon.rpc.blxrbdn.com",
+                "https://polygon.blockpi.network/v1/rpc/public",
+                "https://polygon-mainnet.public.blastapi.io",
+                "https://poly-rpc.gateway.pokt.network",
+                "https://polygon-bor.publicnode.com"],
+    "ARBITRIUM" : ["https://rpc.ankr.com/arbitrum",
+                "https://floral-silent-gadget.arbitrum-mainnet.discover.quiknode.pro/" + process.env.QUICKNODE_ARBRPC_API_KEY,
+                "https://arbitrum-mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
+                "https://arb-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_ARBRPC_API_KEY,
+                "https://open-platform.nodereal.io/" + process.env.NODEREAL_ARBRPC_API_KEY + "/arbitrum-nitro/"]
 }
 
 module.exports = endpoints

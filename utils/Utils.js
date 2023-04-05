@@ -6,8 +6,10 @@ class Utils {
   static chains = {
     ETH_MAINNET: "ETH_MAINNET",
     BSC_MAINNET: "BSC_MAINNET",
-    POLYGON: "POLYGON"
+    POLYGON: "POLYGON",
+    ARBITRIUM: "ARBITRIUM"
   }
+
   static verifiedUrl = {
       ETH_MAINNET: "https://etherscan.io/contractsVerified",
       BSC_MAINNET: "https://bscscan.com/contractsVerified",

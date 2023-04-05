@@ -911,7 +911,8 @@ async function performInsertQuery(conn, query, params, suppressError = false, is
 
 async function getFromParsedPool(conn, chain, address, bypassRecheck = false){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
-  let toRefreshSubQuery = (process.env.UNVERIFIED_RECHECK_ENABLED == 1 && !bypassRecheck) ? "(verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() )" : "'0'"
+  let toRefreshSubQuery = (process.env.UNVERIFIED_RECHECK_ENABLED == 1 && !bypassRecheck) ? 
+    "(verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() )" : "'0'"
   let query = "SELECT *, " + toRefreshSubQuery + " as toRefresh, verified FROM " + parsedTable + " WHERE address = ?"
   let queryParams = (process.env.UNVERIFIED_RECHECK_ENABLED == 1 && !bypassRecheck) ? [process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS, address] : [address]
   try{

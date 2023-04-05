@@ -10,6 +10,11 @@ class Utils {
     ARBITRIUM: "ARBITRIUM"
   }
 
+  static isL2(chain){
+    const L2s = ["ARBITRIUM", "OPTIMISM"]
+    return L2s.includes(chain)
+  }
+
   static verifiedUrl = {
       ETH_MAINNET: "https://etherscan.io/contractsVerified",
       BSC_MAINNET: "https://bscscan.com/contractsVerified",

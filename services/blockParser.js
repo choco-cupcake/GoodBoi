@@ -70,7 +70,7 @@ async function parseBlocks(){
 
 async function parseBlock(blockIndex){
   try{
-    console.log("Block #" + blockIndex)
+    // console.log("Block #" + blockIndex)
     let txObj = await getBlockObject(blockIndex)
     let toAddresses = txObj.transactions.map(e => e.to).filter(e => !!e)
     toAddresses = [...new Set(toAddresses)]
@@ -79,7 +79,15 @@ async function parseBlock(blockIndex){
       if(toAddressBuffer.length >= process.env.IS_CONTRACT_BATCH_LEN){
         let areContracts = await (await getAggregatorContractRoundRobin()).methods.areContracts(toAddressBuffer).call()
         let toContracts = toAddressBuffer.filter((e,index) => areContracts[index])
-        await mysql.pushAddressesToPool(dbConn, chain, toContracts)
+        if(Utils.isL2(chain)){ // L2s need more concurrency to keep up
+          let promises = []
+          let third = Math.floor(toContracts.length / 3)
+          for(let i=0; i<3; i++)
+            promises.push(mysql.pushAddressesToPool(dbConn, chain, toContracts.slice(i*third, i==2 ? toContracts.length : (i+1)*third)))
+          await Promise.all(promises)
+        } else{
+          await mysql.pushAddressesToPool(dbConn, chain, toContracts)
+        }
         await mysql.updateLastParsedBlock(dbConn, blockIndex, chain)
         let parsedBlocks = blockIndex - lastBlockParsed
         let elapsed = Date.now() - lastParsedTS

@@ -293,7 +293,7 @@ async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20H
 async function checkPruneContract(conn, chain, contractAddress, totalUSDValue){
   if(process.env.CONTRACT_PRUNER_ENABLED && Number(totalUSDValue) < Number(process.env.CONTRACT_PRUNER_MIN_BALANCE)){
     // check if to prune
-    let query = "SELECT ((lastTx + INTERVAL ? day) <= NOW()) AS toPrune FROM contract WHERE address = ? AND `chain` = ? AND addressVars IS NULL"; // TODO change addressVars IS NULL to analysisFlag=0 if db grows too large (unflagged but with addressVars might still be interesting) 
+    let query = "SELECT ((lastTx + INTERVAL ? day) <= NOW() AND addressVars IS NULL) AS toPrune FROM contract WHERE address = ? AND `chain` = ?"; // TODO change addressVars IS NULL to analysisFlag=0 if db grows too large (unflagged but with addressVars might still be interesting) 
     try{
       let [data, fields] = await conn.query(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, contractAddress, chain]); 
       if(!data.length){

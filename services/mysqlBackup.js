@@ -24,6 +24,11 @@ async function backupDB(){
     console.log("Not yet time to backup. Abort")
     return
   }
+  let currentHour = new Date().getHours()
+  if(currentHour < 2 || currentHour > 8){
+    console.log("Only allowed at night")
+    return
+  }
   console.log("Backup started")
   let bkObj = await backupToFile()
   console.log(bkObj.filename, " created")

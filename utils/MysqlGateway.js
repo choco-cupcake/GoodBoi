@@ -668,7 +668,6 @@ async function markAsVerified(conn, chain, address){
     if(!data.affectedRows){ 
       Utils.printQueryError(query, address, "Error marking address as unverified")
     }
-    await deleteAddressFromPool(conn, chain, address)
     return true
   }
   catch(e){

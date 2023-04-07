@@ -83,10 +83,10 @@ async function parseBlock(blockIndex){
           let promises = []
           let third = Math.floor(toContracts.length / 3)
           for(let i=0; i<3; i++)
-            promises.push(mysql.pushAddressesToPool(dbConn, chain, toContracts.slice(i*third, i==2 ? toContracts.length : (i+1)*third)))
+            promises.push(mysql.pushAddressesToPoolBatch(dbConn, chain, toContracts.slice(i*third, i==2 ? toContracts.length : (i+1)*third)))
           await Promise.all(promises)
         } else{
-          await mysql.pushAddressesToPool(dbConn, chain, toContracts)
+          await mysql.pushAddressesToPoolBatch(dbConn, chain, toContracts)
         }
         await mysql.updateLastParsedBlock(dbConn, blockIndex, chain)
         let parsedBlocks = blockIndex - lastBlockParsed

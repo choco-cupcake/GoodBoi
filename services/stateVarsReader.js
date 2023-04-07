@@ -61,8 +61,8 @@ async function getWETHPrice(){
 }
 
 function bootstrapWeb3(){
-  let varsReaderAddress = process.env["STATE_VARS_AGGREGATOR_" + cliOptions.chain]
-  let flaggerAddress = process.env["FLAGGER_CONTRACT_" + cliOptions.chain]
+  const varsReaderAddress = require("../data/smart_contracts")["varsReader"][chain]
+  const flaggerAddress = require("../data/smart_contracts")["flagger"][chain]
   for(let endp of rpcEndpoints){
     web3.push(new Web3(endp))
     aggregatorContract.push(new web3[web3.length - 1].eth.Contract(JSON.parse(aggregatorABI), varsReaderAddress))

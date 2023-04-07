@@ -825,6 +825,35 @@ async function pushAddressesToPool(conn, chain, addressesList){
   console.log((inserted - rechecks) + " of " + addressesList.length + " new contracts added to db, " + rechecks + " rechecks")
 }
 
+async function pushAddressesToPoolBatch(conn, chain, addressesList){
+  let prevInsert =  await getFromParsedPoolBatch(conn, chain, addressesList)
+
+  let newAddresses = addressesList.filter(e => prevInsert.filter(h => h.address == e).length == 0 )
+  let toRecheck = prevInsert.filter(e => e.verified == 0 && e.toRecheck == 1).map(e => e.address)
+  let toInsert = newAddresses.concat(toRecheck)
+  let toUpdateLastTx = prevInsert.filter(e => e.verified == 1).map(e => e.address)
+  if(newAddresses.length)
+    await pushAddressToParsedTableBatch(conn, chain, newAddresses)
+  if(toInsert.length)
+    await pushAddressToPoolTableBatch(conn, chain, toInsert, 'addresspool')
+  
+  if(toUpdateLastTx.length)
+    await updateLastTxBatch(conn, chain, toUpdateLastTx)
+
+  console.log(newAddresses.length + " of " + addressesList.length + " new contracts added to db, " + toRecheck.length + " rechecks")
+}
+
+async function updateLastTxBatch(conn, chain, addressBatch){
+  addressList = "('" + addressBatch.join("','") + "')"
+  let query = "UPDATE contract SET lastTx = NOW() WHERE chain = ? AND address IN " + addressList
+  try{
+    let [data, fields] = await conn.query(query, chain);
+  }
+  catch(e){
+    Utils.printQueryError(query, [chain, addressBatch], "Error updating lastTx - " + e.message)
+  }
+}
+
 async function updateLastTx(conn, chain, address){
   let query = "UPDATE contract SET lastTx = NOW() WHERE chain = ? AND address = ?"
   try{
@@ -841,10 +870,33 @@ async function pushAddressToParsedTable(conn, chain, address){
   return (await performInsertQuery(conn, insertQuery, [address], true, true)).data 
 }
 
+async function pushAddressToParsedTableBatch(conn, chain, addressBatch){
+  let parsedTable = 'parsedaddress_' + chain.toLowerCase()
+  addressBatch = addressBatch.map(e => "('" + e + "')")
+  let insertQuery = "INSERT INTO " + parsedTable + " (address) VALUES " + addressBatch.join(",")
+  try{
+    let [data, fields] = await conn.query(insertQuery);
+  }
+  catch(e){
+    Utils.printQueryError(query, [], "Error inserting batch address to parsed table - " + e.message)
+  }
+}
+
 async function pushAddressToPoolTable(conn, chain, address, table, muteErrors=false){
   let insertQuery = "INSERT INTO " + table + " (address, chain) VALUES (?,?);"
   let ret = (await performInsertQuery(conn, insertQuery, [address, chain], muteErrors) ).data
   return ret
+}
+
+async function pushAddressToPoolTableBatch(conn, chain, addressBatch, table){
+  addressBatch = addressBatch.map(e => "('" + e + "','"+ chain +"')")
+  let insertQuery = "INSERT INTO " + table + " (address, chain) VALUES " + addressBatch.join(",")
+  try{
+    let [data, fields] = await conn.query(insertQuery);
+  }
+  catch(e){
+    Utils.printQueryError(query, [], "Error pushAddressToPoolTableBatch - " + e.message)
+  }
 }
 
 async function deleteAddressFromPool(conn, chain, address){
@@ -909,12 +961,30 @@ async function performInsertQuery(conn, query, params, suppressError = false, is
   }
 }
 
-async function getFromParsedPool(conn, chain, address, bypassRecheck = false){
+async function getFromParsedPool(conn, chain, address){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
-  let toRefreshSubQuery = (process.env.UNVERIFIED_RECHECK_ENABLED == 1 && !bypassRecheck) ? 
+  let toRefreshSubQuery = (process.env.UNVERIFIED_RECHECK_ENABLED == 1) ? 
     "(verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() )" : "'0'"
   let query = "SELECT *, " + toRefreshSubQuery + " as toRefresh, verified FROM " + parsedTable + " WHERE address = ?"
-  let queryParams = (process.env.UNVERIFIED_RECHECK_ENABLED == 1 && !bypassRecheck) ? [process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS, address] : [address]
+  let queryParams = (process.env.UNVERIFIED_RECHECK_ENABLED == 1) ? [process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS, address] : [address]
+  try{
+    let [data, fields] = await conn.query(query, queryParams);
+    return data
+  }
+  catch(e){
+    Utils.printQueryError(query, chain, e.message)
+    return []
+  }
+}
+
+async function getFromParsedPoolBatch(conn, chain, address){
+  let parsedTable = 'parsedaddress_' + chain.toLowerCase()
+  let addressBatch = '("' + address.join('","') + '")'
+  let recheckCondition = "(verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() )"
+
+  let query = "SELECT address, verified, "+recheckCondition+" AS toRecheck FROM " + parsedTable + " WHERE address IN " + addressBatch 
+
+  let queryParams = (process.env.UNVERIFIED_RECHECK_ENABLED == 1) ? process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS : null
   try{
     let [data, fields] = await conn.query(query, queryParams);
     return data
@@ -929,4 +999,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

@@ -181,7 +181,7 @@ function cleanVerificationDateHeader(source){
 async function getRawSource(address){
 	let url = apiEndpoint + "&address=" + address + "&apikey=" + scannerApiKey
 	try {
-		const response = await axios.get(url);
+		const response = await axios.get(url, { headers: { 'Accept-Encoding': 'application/json', } });
 		if(response?.data?.result && response?.data?.result.length){
 			if(Array.isArray(response?.data?.result)) 
 				return response?.data?.result[0]

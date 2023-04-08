@@ -14,4 +14,11 @@ const scannersApiKeys = {
   "ARBITRUM" : process.env.ARBISCAN_API
 }
 
-module.exports = {endpoints: scannersApiEndpoints, apikeys: scannersApiKeys}
+const axiosConfig = {
+  "ETH_MAINNET" : {},
+  "BSC_MAINNET" : {},
+  "POLYGON" : {},
+  "ARBITRUM" : { headers: { 'Accept-Encoding': 'application/json', } }
+}
+
+module.exports = {endpoints: scannersApiEndpoints, apikeys: scannersApiKeys, axiosConfig: axiosConfig}

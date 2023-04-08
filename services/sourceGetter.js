@@ -2,8 +2,9 @@ require("dotenv").config()
 const { program } = require('commander');
 const axios = require("axios")
 const mysql = require('../utils/MysqlGateway');
-const Utils = require('../utils/Utils');program
-.option('--chain <string>', 'chain to operate on');
+const Utils = require('../utils/Utils');
+
+program.option('--chain <string>', 'chain to operate on');
 
 program.parse();
 const cliOptions = program.opts();
@@ -15,8 +16,10 @@ if(!Object.values(Utils.chains).includes(chain)){
 }
 console.log("Operating on chain: " + chain)
 
-const apiEndpoint = require("../data/scanners_API_endpoints").endpoints[chain]
-const scannerApiKey = require("../data/scanners_API_endpoints").apikeys[chain]
+const scannerEndpoints = require("../data/scanners_API_endpoints")
+const apiEndpoint = scannerEndpoints.endpoints[chain]
+const scannerApiKey = scannerEndpoints.apikeys[chain]
+const axiosConfig = scannerEndpoints.axiosConfig[chain]
 
 
 let addressBuffer = []
@@ -181,7 +184,7 @@ function cleanVerificationDateHeader(source){
 async function getRawSource(address){
 	let url = apiEndpoint + "&address=" + address + "&apikey=" + scannerApiKey
 	try {
-		const response = await axios.get(url, { headers: { 'Accept-Encoding': 'application/json', } });
+		const response = await axios.get(url, axiosConfig);
 		if(response?.data?.result && response?.data?.result.length){
 			if(Array.isArray(response?.data?.result)) 
 				return response?.data?.result[0]

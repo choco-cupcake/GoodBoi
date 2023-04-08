@@ -17,6 +17,8 @@ program
 program.parse();
 const cliOptions = program.opts();
 
+const chain = cliOptions.chain
+
 if(!Object.values(Utils.chains).includes(chain)){
   console.log("Unrecognized chain, abort.")
   process.exit()

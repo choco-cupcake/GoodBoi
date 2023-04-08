@@ -1,6 +1,7 @@
 const Database = require('./DB')
 const Utils = require('./Utils')
 const Crypto = require('crypto')
+const Web3 = require("web3")
 
 async function updateCache(conn, tag, value){
   let query = "UPDATE cache SET value = ?, datareg = NOW() WHERE tag = ?"
@@ -829,8 +830,8 @@ async function pushAddressesToPool(conn, chain, addressesList){
 async function pushAddressesToPoolBatch(conn, chain, addressesList){
   let prevInsert =  await getFromParsedPoolBatch(conn, chain, addressesList)
 
-  let newAddresses = addressesList.filter(e => prevInsert.filter(h => h.address == e).length == 0 )
-  let toRecheck = prevInsert.filter(e => e.verified == 0 && e.toRecheck == 1).map(e => e.address)
+  let newAddresses = addressesList.filter(e => prevInsert.filter(h => h.address.toLowerCase() == e.toLowerCase()).length == 0 ).map(e => Web3.utils.toChecksumAddress(e))
+  let toRecheck = prevInsert.filter(e => e.verified == 0 && e.toRecheck == 1).map(e => Web3.utils.toChecksumAddress(e.address))
   let toInsert = newAddresses.concat(toRecheck)
   let toUpdateLastTx = prevInsert.filter(e => e.verified == 1).map(e => e.address)
   if(newAddresses.length)
@@ -845,8 +846,8 @@ async function pushAddressesToPoolBatch(conn, chain, addressesList){
 }
 
 async function updateLastTxBatch(conn, chain, addressBatch){
-  addressList = "('" + addressBatch.join("','") + "')"
-  let query = "UPDATE contract SET lastTx = NOW() WHERE chain = ? AND address IN " + addressList
+  addressList = "('" + addressBatch.map(e => e.toLowerCase()).join("','") + "')"
+  let query = "UPDATE contract SET lastTx = NOW() WHERE chain = ? AND LOWER(address) IN " + addressList
   try{
     let [data, fields] = await conn.query(query, chain);
   }
@@ -856,9 +857,9 @@ async function updateLastTxBatch(conn, chain, addressBatch){
 }
 
 async function updateLastTx(conn, chain, address){
-  let query = "UPDATE contract SET lastTx = NOW() WHERE chain = ? AND address = ?"
+  let query = "UPDATE contract SET lastTx = NOW() WHERE chain = ? AND LOWER(address) = ?"
   try{
-    let [data, fields] = await conn.query(query, [chain, address]);
+    let [data, fields] = await conn.query(query, [chain, address.toLowerCase()]);
   }
   catch(e){
     Utils.printQueryError(query, [chain, address], "Error updating lastTx - " + e.message)
@@ -874,12 +875,12 @@ async function pushAddressToParsedTable(conn, chain, address){
 async function pushAddressToParsedTableBatch(conn, chain, addressBatch){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
   addressBatch = addressBatch.map(e => "('" + e + "')")
-  let insertQuery = "INSERT INTO " + parsedTable + " (address) VALUES " + addressBatch.join(",")
+  let insertQuery = "INSERT IGNORE INTO " + parsedTable + " (address) VALUES " + addressBatch.join(",")
   try{
     let [data, fields] = await conn.query(insertQuery);
   }
   catch(e){
-    Utils.printQueryError(query, [], "Error inserting batch address to parsed table - " + e.message)
+    Utils.printQueryError(insertQuery, [], "Error inserting batch address to parsed table - " + e.message)
   }
 }
 
@@ -891,12 +892,12 @@ async function pushAddressToPoolTable(conn, chain, address, table, muteErrors=fa
 
 async function pushAddressToPoolTableBatch(conn, chain, addressBatch, table){
   addressBatch = addressBatch.map(e => "('" + e + "','"+ chain +"')")
-  let insertQuery = "INSERT INTO " + table + " (address, chain) VALUES " + addressBatch.join(",")
+  let insertQuery = "INSERT IGNORE INTO " + table + " (address, chain) VALUES " + addressBatch.join(",")
   try{
     let [data, fields] = await conn.query(insertQuery);
   }
   catch(e){
-    Utils.printQueryError(query, [], "Error pushAddressToPoolTableBatch - " + e.message)
+    Utils.printQueryError(insertQuery, [], "Error pushAddressToPoolTableBatch - " + e.message)
   }
 }
 
@@ -980,10 +981,10 @@ async function getFromParsedPool(conn, chain, address){
 
 async function getFromParsedPoolBatch(conn, chain, address){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
-  let addressBatch = '("' + address.join('","') + '")'
+  let addressBatch = '("' + address.map(e => e.toLowerCase()).join('","') + '")'
   let recheckCondition = "(verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() )"
 
-  let query = "SELECT address, verified, "+recheckCondition+" AS toRecheck FROM " + parsedTable + " WHERE address IN " + addressBatch 
+  let query = "SELECT address, verified, "+recheckCondition+" AS toRecheck FROM " + parsedTable + " WHERE LOWER(address) IN " + addressBatch 
 
   let queryParams = (process.env.UNVERIFIED_RECHECK_ENABLED == 1) ? process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS : null
   try{

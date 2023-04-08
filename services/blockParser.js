@@ -32,13 +32,15 @@ bootstrapWeb3()
 main()
 
 async function main(){
-	let start = Date.now()
-	await parseBlocks()
-	let toWait = process.env.BLOCK_PARSER_RUN_INTERVAL_MINUTES * 60 * 1000 - (Date.now() - start) // 1 min - elapsed
-	if(toWait > 0){
-		await Utils.sleep(toWait)
-	}
-	main()
+  while(true){
+    let start = Date.now()
+    await parseBlocks()
+    console.log("loop done")
+    let toWait = process.env.BLOCK_PARSER_RUN_INTERVAL_MINUTES * 60 * 1000 - (Date.now() - start) // 1 min - elapsed
+    if(toWait > 0){
+      await Utils.sleep(toWait)
+    }
+  }
 }
 
 function bootstrapWeb3(){

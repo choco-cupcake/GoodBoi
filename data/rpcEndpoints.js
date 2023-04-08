@@ -1,7 +1,7 @@
 require("dotenv").config()
 
 const endpoints = {
-  "ETH_MAINNET" : ["wss://mainnet.infura.io/ws/v3/" + process.env.INFURA_API_KEY,
+  "ETH_MAINNET" : ["https://mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
                   "https://eth.llamarpc.com",
                   "https://ethereum.publicnode.com",
                   "https://rpc.ankr.com/eth",

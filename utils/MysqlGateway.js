@@ -15,8 +15,10 @@ async function updateCache(conn, tag, value){
   }
 }
 
-async function getFromCache(conn, tag){
-  let query = "SELECT value FROM cache WHERE tag = ? AND datareg + INTERVAL expire_minutes MINUTE > NOW()"
+async function getFromCache(conn, tag, bypassExpire = false){
+  let query = "SELECT value FROM cache WHERE tag = ?"
+  if(!bypassExpire)
+    query +=  "AND datareg + INTERVAL expire_minutes MINUTE > NOW()"
   try{
     let [data, fields] = await conn.query(query, tag)
     if(!data.length){

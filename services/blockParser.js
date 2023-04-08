@@ -77,6 +77,7 @@ async function parseBlock(blockIndex){
     for(let toAddr of toAddresses){
       toAddressBuffer.push(toAddr)
       if(toAddressBuffer.length >= process.env.IS_CONTRACT_BATCH_LEN){
+        let t1 = Date.now()
         let areContracts = await (await getAggregatorContractRoundRobin()).methods.areContracts(toAddressBuffer).call()
         let toContracts = toAddressBuffer.filter((e,index) => areContracts[index])
         if(Utils.isL2(chain)){ // L2s need more concurrency to keep up
@@ -92,10 +93,12 @@ async function parseBlock(blockIndex){
         let parsedBlocks = blockIndex - lastBlockParsed
         let elapsed = Date.now() - lastParsedTS
         let bs = Number((parsedBlocks * 1000000 / elapsed).toFixed(0)) / 1000
-        console.log("Parsed " + parsedBlocks + " blocks in " + elapsed + " seconds - " + bs + " blocks/sec")
+        let elapsedInsert = Date.now() - t1
+        console.log("Parsed " + parsedBlocks + " blocks in " + elapsed + " seconds - " + bs + " blocks/sec " + "insert time: " + elapsedInsert)
         lastBlockParsed = blockIndex
         lastParsedTS = Date.now()
         toAddressBuffer.length = 0
+        
       }
     }
   }

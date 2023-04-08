@@ -10,6 +10,16 @@ class Utils {
     ARBITRIUM: "ARBITRIUM"
   }
 
+  static chainToMoralisID(chain){
+    let map = {
+      ETH_MAINNET: "0x1",
+      BSC_MAINNET: "0x38",
+      POLYGON: "0x89",
+      ARBITRIUM: "0xa4b1"
+    }
+    return map[chain]
+  }
+
   static isL2(chain){
     const L2s = ["ARBITRIUM", "OPTIMISM"]
     return L2s.includes(chain)

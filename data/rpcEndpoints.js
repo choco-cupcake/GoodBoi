@@ -32,7 +32,7 @@ const endpoints = {
                 "https://polygon-mainnet.public.blastapi.io",
                 "https://poly-rpc.gateway.pokt.network",
                 "https://polygon-bor.publicnode.com"],
-    "ARBITRIUM" : ["https://rpc.ankr.com/arbitrum",
+    "ARBITRUM" : ["https://arbitrum-one.gateway.pokt.network/v1/lb/" + process.env.PORTAL_POKT_API_KEY,
                 "https://floral-silent-gadget.arbitrum-mainnet.discover.quiknode.pro/" + process.env.QUICKNODE_ARBRPC_API_KEY,
                 "https://arbitrum-mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
                 "https://arb-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_ARBRPC_API_KEY,

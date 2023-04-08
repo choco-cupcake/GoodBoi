@@ -18,7 +18,7 @@ program
 
 program.parse();
 const cliOptions = program.opts();
-const chain = "ETH_MAINNET" // ===================================== cliOptions.chain
+const chain = cliOptions.chain
 
 if(!Object.values(Utils.chains).includes(chain)){
   console.log("Unrecognized chain, abort.")
@@ -27,8 +27,6 @@ if(!Object.values(Utils.chains).includes(chain)){
 console.log("Operating on chain: " + chain)
 
 let rpcEndpoints = require("../data/rpcEndpoints")[chain]
-if(chain == Utils.chains.ARBITRIUM) // skip ankr endpoint for this as it provides a low gas limit and we squeeze it here
-  rpcEndpoints = rpcEndpoints.filter(e => e != "https://rpc.ankr.com/arbitrum") 
 const priceAggregatorAddress = require("../data/smart_contracts")["priceAggregator"][chain]
 let ERC20_of_interest = require("../data/ERC20_of_interest")[chain];
 
@@ -155,7 +153,7 @@ async function getAllQuotes(){
     ERC20_of_interest = JSON.parse(quotes)
     console.log("ERC20 prices got from cache")
   } else{
-    if(chain == "ARBITRIUM"){ // moralis does not support token prices on arbitrium, gotta get them from uniswapV3
+    if(chain == "ARBITRUM"){ // moralis does not support token prices on arbitrum, gotta get them from uniswapV3
       ERC20_of_interest = await uniV3Quoter.getAllPrices(dbConn, chain, ERC20_of_interest)
     }
     else {

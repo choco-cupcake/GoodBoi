@@ -225,7 +225,7 @@ const ERC20s_of_interest = {"ETH_MAINNET" : [
     {"token":"BNT","address":"0xc26d47d5c33ac71ac5cf9f776d63ba292a4f7842","decimals":"18"},
     {"token":"BOBA","address":"0xa4B2B20b2C73c7046ED19AC6bfF5E5285c58F20a","decimals":"18"},
     {"token":"OGN","address":"0xa63beffd33ab3a2efd92a39a7d2361cee14ceba8","decimals":"18"}],
-    "ARBITRIUM": [{"token":"ETH","address":"0x0000000000000000000000000000000000000000","decimals":"18"},
+    "ARBITRUM": [{"token":"ETH","address":"0x0000000000000000000000000000000000000000","decimals":"18"},
     {"token":"wETH","address":"0x82af49447d8a07e3bd95bd0d56f35241523fbab1","decimals":"18"},
     {"token":"ARB","address":"0x912ce59144191c1204e64559fe8253a0e49e6548","decimals":"18"},
     {"token":"USDC","address":"0xff970a61a04b1ca14834a43f5de4533ebddb5cc8","decimals":"6"},

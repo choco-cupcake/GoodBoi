@@ -271,7 +271,7 @@ async function checkFlags(_contractsWIP){
     let callResponse = []
     let batch = [] // gasleft() contract feature not working ¯\_(ツ)_/¯
     let intCount = 0 // internal addresses checks are more expensive (isPool + hasPool vs hasPool)
-    let maxAddrCount = cliOptions.chain == "ETH_MAINNET" ? 30 : 50 // TODO gotta check arbitrium
+    let maxAddrCount = cliOptions.chain == "ETH_MAINNET" ? 30 : 50 // TODO gotta check arbitrum
     for(let c of calls){
       batch.push(c)
       intCount += c.internalAddresses.length + 1

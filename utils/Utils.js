@@ -7,7 +7,7 @@ class Utils {
     ETH_MAINNET: "ETH_MAINNET",
     BSC_MAINNET: "BSC_MAINNET",
     POLYGON: "POLYGON",
-    ARBITRIUM: "ARBITRIUM"
+    ARBITRUM: "ARBITRUM"
   }
 
   static chainToMoralisID(chain){
@@ -15,13 +15,13 @@ class Utils {
       ETH_MAINNET: "0x1",
       BSC_MAINNET: "0x38",
       POLYGON: "0x89",
-      ARBITRIUM: "0xa4b1"
+      ARBITRUM: "0xa4b1"
     }
     return map[chain]
   }
 
   static isL2(chain){
-    const L2s = ["ARBITRIUM", "OPTIMISM"]
+    const L2s = ["ARBITRUM", "OPTIMISM"]
     return L2s.includes(chain)
   }
 

@@ -23,14 +23,15 @@ program
 
 program.parse();
 const cliOptions = program.opts();
+const chain = cliOptions.chain
 
-if(!Object.values(Utils.chains).includes(cliOptions.chain)){
+if(!Object.values(Utils.chains).includes(chain)){
   console.log("Unrecognized chain, abort.")
   process.exit()
 }
-console.log("Operating on chain: " + cliOptions.chain)
+console.log("Operating on chain: " + chain)
 
-const rpcEndpoints = require("../data/rpcEndpoints")[cliOptions.chain]
+const rpcEndpoints = require("../data/rpcEndpoints")[chain]
 
 main()
 
@@ -39,7 +40,7 @@ async function main(){
   bootstrapWeb3()
   dbConn = await mysql.getDBConnection()
   await getWETHPrice()
-  contractPool = await mysql.getBatchVarsToRead(dbConn, cliOptions.chain)
+  contractPool = await mysql.getBatchVarsToRead(dbConn, chain)
   let start = Date.now()
   if(contractPool.length){
     await refreshVarsValues()
@@ -55,14 +56,14 @@ async function main(){
 }
 
 async function getWETHPrice(){
-  let ERC20PricesCached = JSON.parse(await mysql.getFromCache(dbConn,"ERC20_" + cliOptions.chain))
+  let ERC20PricesCached = JSON.parse(await mysql.getFromCache(dbConn,"ERC20_" + chain))
   WETHPrice = ERC20PricesCached[0].USD_price
   minPoolWETH = new BigNumber(process.env.FLAGGER_CONTRACT_MIN_POOL_USD).times(new BigNumber(10).exponentiatedBy(ERC20PricesCached[0].decimals)).div(WETHPrice).toFixed(0) // only used for UniV2 pools
 }
 
 function bootstrapWeb3(){
-  const varsReaderAddress = require("../data/smart_contracts")["varsReader"][cliOptions.chain]
-  const flaggerAddress = require("../data/smart_contracts")["flagger"][cliOptions.chain]
+  const varsReaderAddress = require("../data/smart_contracts")["varsReader"][chain]
+  const flaggerAddress = require("../data/smart_contracts")["flagger"][chain]
   for(let endp of rpcEndpoints){
     web3.push(new Web3(endp))
     aggregatorContract.push(new web3[web3.length - 1].eth.Contract(JSON.parse(aggregatorABI), varsReaderAddress))
@@ -72,7 +73,7 @@ function bootstrapWeb3(){
 
 async function refreshVarsValues(){ 
   console.log("Vars values update started")
-	await refreshBatch() // parallel crawlers not needed
+	await refreshBatch() 
 }
 
 async function refreshBatch(){
@@ -271,7 +272,7 @@ async function checkFlags(_contractsWIP){
     let callResponse = []
     let batch = [] // gasleft() contract feature not working ¯\_(ツ)_/¯
     let intCount = 0 // internal addresses checks are more expensive (isPool + hasPool vs hasPool)
-    let maxAddrCount = cliOptions.chain == "ETH_MAINNET" ? 30 : 50 // TODO gotta check arbitrum
+    let maxAddrCount = chain == "ETH_MAINNET" ? 30 : 50 // currently using some crap rpc providers for ETH, gas limit is capped
     for(let c of calls){
       batch.push(c)
       intCount += c.internalAddresses.length + 1
@@ -382,7 +383,7 @@ function cleanNullAddress(addr){
 }
 async function checkAndFill() {
 	if(contractPool.length < maxReadsPerTx * 50){ // margin for concurrency
-    contractPool = await mysql.getBatchVarsToRead(dbConn, cliOptions.chain)
+    contractPool = await mysql.getBatchVarsToRead(dbConn, chain)
   }
 }
 

@@ -20,7 +20,7 @@ const smartContracts = {
     ETH_MAINNET:'0xc562f176c9bde0ddb0994db874c822ea5ffd9ef5', 
     BSC_MAINNET:'0xC2975999CE70a01401341F96a7125b32Ebac9F4D', 
     POLYGON:'0xc2975999ce70a01401341f96a7125b32ebac9f4d', 
-    ARBITRUM:''},
+    ARBITRUM:'0xf63bc214c687d98d438eb4ff0afe34e239895588'},
 }
 
 module.exports = smartContracts

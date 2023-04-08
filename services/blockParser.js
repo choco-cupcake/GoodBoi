@@ -168,5 +168,4 @@ async function loopWeb3SleepCheck(){
     }
     web3IndexLastLoop = Date.now()
   }
-
 }

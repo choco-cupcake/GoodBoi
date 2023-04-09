@@ -3,17 +3,59 @@ const Utils = require('./Utils')
 const Crypto = require('crypto')
 const Web3 = require("web3")
 
-async function getFlaggedContractsToReflect(conn){
-  let query = "SELECT value FROM cache WHERE tag = ?"
+async function updateFlagReflectionDate(conn, cID){
+  let query = "UPDATE contract SET reflUpdatedAt=NOW() WHERE ID = ?"
   try{
-    let [data, fields] = await conn.query(query, tag)
-    if(!data.length){
-      return null
+    let [data, fields] = await conn.query(query, cID)
+    if(!data.affectedRows){
+      console.log("ERROR - updateReflectionDate " + cID)
     }
-    return data[0].value
   }
   catch(e){
-    console.log("ERROR - Can't get tag " + tag + " from cache", e.message)
+    console.log("ERROR - updateReflectionDate " + cID, e.message)
+  }
+}
+
+async function flagReflection(conn, cID, poolFlag, balanceFlag){
+  let subQ = []
+  if(poolFlag==1)
+    subQ.push("reflPoolFlag=1")
+  if(balanceFlag==1)
+    subQ.push("reflBalanceFlag=1")
+  
+  let query = "UPDATE contract SET " + subQ.join(",") + " WHERE ID = ?"
+  try{
+    let [data, fields] = await conn.query(query, cID)
+    if(!data.affectedRows){
+      console.log("ERROR - Can't update reflection tag for contract " + cID)
+    }
+  }
+  catch(e){
+    console.log("ERROR - Can't update reflection tag for contract " + cID, e.message)
+  }
+}
+
+async function getContractHavingAddressInVars(conn, address, chain){
+  let query = "SELECT ID FROM contract WHERE chain=? AND (addressVars LIKE ? OR implAddressVars LIKE ?)"
+  try{
+    let [data, fields] = await conn.query(query, [chain, "%"+address+"%", "%"+address+"%"])
+    return data
+  }
+  catch(e){
+    console.log("ERROR - getContractHavingAddressInVars ", e.message)
+    return null
+  }
+
+}
+
+async function getFlaggedContractsToReflect(conn){
+  let query = "SELECT ID, address, chain, poolFlag, balanceFlag FROM contract WHERE (poolFlag=1 OR balanceFlag=1) AND DATE_SUB(NOW(), INTERVAL ? DAY) > reflUpdatedAt"
+  try{
+    let [data, fields] = await conn.query(query, process.env.REFLECT_DAYS_REPEAT)
+    return data
+  }
+  catch(e){
+    console.log("ERROR - getFlaggedContractsToReflect ", e.message)
     return null
   }
 
@@ -293,18 +335,37 @@ async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20H
     console.log("pruned ", chain, " - ", contractAddress)
     return true
   }
-
   let query = "UPDATE balances SET ERC20Holdings = ?, usdValue = ?, ethBalance_bp = ?, lastUpdate = NOW() WHERE address = ? AND chain = ?"
+  
   try{
     let [data, fields] = await conn.query(query, [ERC20Holdings, totalUSDValue, eth_balance, contractAddress, chain]);
     if(!data.affectedRows){
       Utils.printQueryError(query, [ERC20Holdings, totalUSDValue, eth_balance, contractAddress, chain], "Error updating balance - row not found")
       return false
     }
+    if(Number(totalUSDValue) > process.env.FLAGGER_MIN_BALANCE){
+      await flagContractBalance(conn, chain, contractAddress)
+    }
     return true
   }
   catch(e){
     Utils.printQueryError(query, [ERC20Holdings, totalUSDValue, eth_balance, contractAddress, chain], "Error updating balance - " + e.message)
+    return false
+  }
+}
+
+async function flagContractBalance(conn, chain, contractAddress){
+  let query = "UPDATE contract set balanceFlag=1 WHERE chain=? AND address=?"
+  try{
+    let [data, fields] = await conn.query(query, [chain, contractAddress]);
+    if(!data.affectedRows){
+      Utils.printQueryError(query, block, "Error flagging balance")
+      return false
+    }
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, block, "Error flagging balance" + e.message)
     return false
   }
 }
@@ -1022,4 +1083,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

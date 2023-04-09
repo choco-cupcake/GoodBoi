@@ -95,10 +95,13 @@ async function parseBlock(blockIndex, currentBlock){
     toAddresses = [...new Set(toAddresses)] // remove doubles
     for(let toAddr of toAddresses){
       toAddressBuffer.push(toAddr)
-      if(toAddressBuffer.length >= process.env.IS_CONTRACT_BATCH_LEN){
+      if(toAddressBuffer.length >= process.env.IS_CONTRACT_BATCH_LEN || (blockIndex == currentBlock)){
         let areContracts = await (await getAggregatorContractRoundRobin()).methods.areContracts(toAddressBuffer).call()
         let toContracts = toAddressBuffer.filter((e,index) => areContracts[index])
-        mysql.pushAddressesToPoolBatch(dbConn, chain, toContracts)
+        if(Utils.isL2(chain))
+          mysql.pushAddressesToPoolBatch(dbConn, chain, toContracts)
+        else
+          await mysql.pushAddressesToPoolBatch(dbConn, chain, toContracts)
         await mysql.updateLastParsedBlock(dbConn, blockIndex, chain)
         let parsedBlocks = blockIndex - lastBlockParsed
         let elapsed = Date.now() - lastParsedTS

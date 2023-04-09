@@ -3,6 +3,22 @@ const Utils = require('./Utils')
 const Crypto = require('crypto')
 const Web3 = require("web3")
 
+async function getFlaggedContractsToReflect(conn){
+  let query = "SELECT value FROM cache WHERE tag = ?"
+  try{
+    let [data, fields] = await conn.query(query, tag)
+    if(!data.length){
+      return null
+    }
+    return data[0].value
+  }
+  catch(e){
+    console.log("ERROR - Can't get tag " + tag + " from cache", e.message)
+    return null
+  }
+
+}
+
 async function updateCache(conn, tag, value){
   let query = "UPDATE cache SET value = ?, datareg = NOW() WHERE tag = ?"
   try{
@@ -73,7 +89,7 @@ async function getBatchProxiesToRead(conn, chain){
 }
 
 async function updateAddressVars(conn, cID, isFlagged, addrVars, areChanged, addrVarsImpl, areChangedImpl){
-  let sets = ["varsCheckedAt = NOW()", " analysisFlag = ?"]
+  let sets = ["varsCheckedAt = NOW()", " poolFlag = ?"]
   let queryParams = [isFlagged]
   if(addrVars){
     sets.push(" addressVars = ?")
@@ -296,7 +312,7 @@ async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20H
 async function checkPruneContract(conn, chain, contractAddress, totalUSDValue){
   if(process.env.CONTRACT_PRUNER_ENABLED && Number(totalUSDValue) < Number(process.env.CONTRACT_PRUNER_MIN_BALANCE)){
     // check if to prune
-    let query = "SELECT ((lastTx + INTERVAL ? day) <= NOW() AND addressVars IS NULL) AS toPrune FROM contract WHERE address = ? AND `chain` = ?"; // TODO change addressVars IS NULL to analysisFlag=0 if db grows too large (unflagged but with addressVars might still be interesting) 
+    let query = "SELECT ((lastTx + INTERVAL ? day) <= NOW() AND addressVars IS NULL) AS toPrune FROM contract WHERE address = ? AND `chain` = ?"; // TODO change addressVars IS NULL to poolFlag=0 if db grows too large (unflagged but with addressVars might still be interesting) 
     try{
       let [data, fields] = await conn.query(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, contractAddress, chain]); 
       if(!data.length){

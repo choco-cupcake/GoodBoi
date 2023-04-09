@@ -44,27 +44,27 @@ async function main(){
   await Moralis.start({
     apiKey: process.env.MORALIS_API_KEY
   });
-
-  console.log("loop started")
-  bootstrapWeb3()
-  dbConn = await mysql.getDBConnection()
-  addresses = await mysql.getAddressesOldBalance(dbConn, chain, daysOld, dbBatchSize)
-  let start = Date.now()
-  if(addresses.length){
-    if(today != new Date().getDate()){ // refresh prices once per day
-      today = new Date().getDate()
-      await getAllQuotes() // get fresh prices for all tokens of interest
+  while(true){
+    console.log("loop started")
+    bootstrapWeb3()
+    dbConn = await mysql.getDBConnection()
+    addresses = await mysql.getAddressesOldBalance(dbConn, chain, daysOld, dbBatchSize)
+    let start = Date.now()
+    if(addresses.length){
+      if(today != new Date().getDate()){ // refresh prices once per day
+        today = new Date().getDate()
+        await getAllQuotes() // get fresh prices for all tokens of interest
+      }
+      refillInterval = setInterval(checkAndFill, 1500, chain)
+      await refreshAllBalances()
     }
-    refillInterval = setInterval(checkAndFill, 1500, chain)
-    await refreshAllBalances()
+    else console.log("All balances are up to date. Return")
+    console.log("loop done")
+    let toWait = process.env.BALANCE_GETTER_RUN_INTERVAL_HOURS * 60 * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
+    if(toWait > 0){
+      await Utils.sleep(toWait)
+    }
   }
-  else console.log("All balances are up to date. Return")
-  console.log("loop done")
-	let toWait = process.env.BALANCE_GETTER_RUN_INTERVAL_HOURS * 60 * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
-	if(toWait > 0){
-		await Utils.sleep(toWait)
-	}
-	main()
 }
 
 function bootstrapWeb3(){

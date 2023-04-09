@@ -1,6 +1,5 @@
 const fs = require('fs')
 const path = require('path')
-const { spawnSync } = require('child_process');
 const { Worker } = require('worker_threads');
 const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');

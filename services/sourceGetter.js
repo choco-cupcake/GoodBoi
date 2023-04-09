@@ -32,15 +32,16 @@ let lastRequests = []
 main()
 
 async function main(){
-	console.log("loop started")
-	let start = Date.now()
-	await getAllSources(chain)
-	let toWait = process.env.SOURCE_GETTER_RUN_INTERVAL_MINUTES * 60 * 1000 - (Date.now() - start) // 20min - elapsed
-	console.log("loop done")
-	if(toWait > 0){
-		await Utils.sleep(toWait)
+	while(true){
+		console.log("loop started")
+		let start = Date.now()
+		await getAllSources(chain)
+		let toWait = process.env.SOURCE_GETTER_RUN_INTERVAL_MINUTES * 60 * 1000 - (Date.now() - start) // 20min - elapsed
+		console.log("loop done")
+		if(toWait > 0){
+			await Utils.sleep(toWait)
+		}
 	}
-	main()
 }
 
 

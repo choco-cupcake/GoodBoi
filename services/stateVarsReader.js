@@ -36,23 +36,24 @@ const rpcEndpoints = require("../data/rpcEndpoints")[chain]
 main()
 
 async function main(){
-  console.log("loop started")
-  bootstrapWeb3()
-  dbConn = await mysql.getDBConnection()
-  await getWETHPrice()
-  contractPool = await mysql.getBatchVarsToRead(dbConn, chain)
-  let start = Date.now()
-  if(contractPool.length){
-    await refreshVarsValues()
+  while(true){
+    console.log("loop started")
+    bootstrapWeb3()
+    dbConn = await mysql.getDBConnection()
+    await getWETHPrice()
+    contractPool = await mysql.getBatchVarsToRead(dbConn, chain)
+    let start = Date.now()
+    if(contractPool.length){
+      await refreshVarsValues()
+    }
+    else 
+      console.log("All variables are up to date. Return")
+    console.log("loop done")
+    let toWait = process.env.STATE_VARS_RUN_INTERVAL_HOURS * 60 * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
+    if(toWait > 0){
+      await Utils.sleep(toWait)
+    }
   }
-  else 
-    console.log("All variables are up to date. Return")
-  console.log("loop done")
-	let toWait = process.env.STATE_VARS_RUN_INTERVAL_HOURS * 60 * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
-	if(toWait > 0){
-		await Utils.sleep(toWait)
-	}
-	main()
 }
 
 async function getWETHPrice(){

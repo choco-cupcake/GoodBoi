@@ -1,6 +1,6 @@
-const uninteresting_vars = { // blacklist for vars
-  exact: ["shop"],
-  anypos: ["factory", "operator", "admin", "owner", 
+const uninteresting_vars = { // blacklist for address and address[] - exclude
+  exact: ["shop"], // prefix
+  anypos: ["factory", "operator", "admin", "owner", // in any position
     "marketing", "receiver", "recipient", "dead", "router", 
     "fee", "logic", "treasury", "dev", "burn", "governance", 
     "minter", "team", "controller", "charity", "metadata", 
@@ -10,7 +10,7 @@ const uninteresting_vars = { // blacklist for vars
     "payout","buyers", "users", "depositors", "players", "bidders",
     "holders", "participants", "wallets", "investors"]
 }
-const interesting_mappings = { // whitelist for mappings
+const interesting_mappings = { // whitelist for mapping(uintXXX => address) - only include these (most of mappings are crap)
   exact: [],
   anypos: ["pool", "lp"]
 }

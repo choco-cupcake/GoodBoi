@@ -65,6 +65,9 @@ AMM checked for pools:
 
 Note: Where it is straightforward (UniV2 and UniV2-like), pools are filtered by WETH liquidity to be at least FLAGGER_CONTRACT_MIN_POOL_USD. In the future it would be nice to extend this feature to the other protocols.
 
+##### Flags Reflector
+Reflects Flags, see section Notes.AnalysisFlags
+
 ##### Slither Runner
 Runs slithers instances in parallel and save results on the database. Given a set of detectors to be used, for each contract only the detectors not yet used on that contract are used in the analysis. 
 
@@ -80,7 +83,28 @@ Still using raw queries while collecting requirements before building
 
 ## Notes
 #### Analysis Flags - How to choose which contracts to analyze
-TODO/WIP
+The whole point of this project is to skip the boring part. And manual filtering of results even if simple, is boring.
+It is thus important to have a process to flag "exploitable" contracts, to reduce analysis and manual inspection time.
+
+In this flagging process we want to be more loose than strict, as we will discard all the other contracts from the analysis.
+
+There are currently two main flags implemented:
+- PoolFlag: activated if a contract: 
+	- is an ERC20 with a pool (against WETH)
+	- contains in a storage variable (or array or uint=>address map) an address which is:
+	  - an ERC20 with a pool
+	  - a pool
+- BalanceFlag: activated if a contract has an overall usdValue (native + top ERC20) >= FLAGGER_MIN_BALANCE
+
+In addition to the main flags, there are the Reflected Flags: a contract is reflected flagged if it contains in a storage variable (or array or mapping) the address of a flagged contract. PoolFlag reflects to ReflPoolFlag and BalanceFlag reflects to ReflBalanceFlag.
+
+Reflection flags are used to flag all the components of a multi-contract protocol, where just a single component is BalanceFlagged or PoolFlagged.
+
+This is just the first version, other flags will hopefully be imagined and added — suggestions are highly appreciated.
+
+
+#### Diamond Proxy
+Not supported at the moment.
 
 #### PM2
 The architecture is modular and PM2 is used to manage the module instances. The modules run independently, but may rely on the results of other modules.

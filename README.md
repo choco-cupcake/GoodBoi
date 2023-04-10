@@ -3,7 +3,7 @@
   <img src="https://github.com/choco-cupcake/GoodBoi/raw/main/media/doggo.png?raw=true" alt="Doggo" width="150px"/>
 </p>
 
-Scraper of EVM compatible Smart Contracts' verified sources + runner of Slither custom detectors on the SC Database
+Scraper of EVM compatible Smart Contracts' verified sources and runner of Slither custom detectors on the SC Database
 
 ### Use Cases
 - Look for vulnerable patterns made up taking inspirations from smart contracts being audited, or from hacks happened in the wild — low precision and manual filtering. 
@@ -25,7 +25,7 @@ node services/slitherRunner.js
 
 ## Architecture
 <p align="center">
-  <img src="https://github.com/choco-cupcake/GoodBoi/raw/main/media/Architecture_1.png?raw=true" alt="Architecture Design" width="700px"/>
+  <img src="https://github.com/choco-cupcake/GoodBoi/raw/main/media/Architecture_2.png?raw=true" alt="Architecture Design" width="700px"/>
 </p>
 
 ### Modules description
@@ -34,7 +34,7 @@ Parses 'to' addresses from recent blocks. To reduce the RPC calls, an aggregator
 ##### Source Getter
 Downloads the source codes from etherscan, bscscan, polygonscan through their APIs.
 
-The recheck feature if enabled, rechecks unverified contracts onve every BLOCK_PARSER_VERIFIED_RECHECK_DAYS days, if they happen again in new blocks. So if a contract gets verified few days after deployment, we won't miss it. It would make sense to stop rechecking after a while, but at the moment the system can handle this volume of calls.
+The recheck feature if enabled, rechecks unverified contracts once every BLOCK_PARSER_VERIFIED_RECHECK_DAYS days, if they happen again in new blocks. So if a contract gets verified few days after deployment, we won't miss it. It would make sense to stop rechecking after a while, but at the moment the system can handle this volume of calls.
 
 The source code is analyzed to get from the main contract the public state variables of type address, address[], mapping(unitXXX => address) and save them in a JSON on the database. This is used to check for the PoolFlag, see section Notes.AnalysisFlags.
 ##### Balance Getter
@@ -59,8 +59,8 @@ Note: Variables names are blacklisted to ignore irrelevant ones, and mappings na
 
 AMM checked for pools:
 - Eth: UniV3, UniV2, PancakeSwapV2, BalancerV2
-- BSC: PancakeSwap
-- Polygon: UniV3, Quickswap (UniV2), BalancerV2
+- BSC: PancakeSwapV2
+- Polygon: UniV3, Quickswap, BalancerV2
 - Arbitrum: UniV3
 
 Note: Where it is straightforward (UniV2 and UniV2-like), pools are filtered by WETH liquidity to be at least FLAGGER_CONTRACT_MIN_POOL_USD. In the future it would be nice to extend this feature to the other protocols.
@@ -81,7 +81,7 @@ Still using raw queries while collecting requirements before building
 .env.example
 ````
 
-## Notes
+## Main Notes
 #### Analysis Flags - How to choose which contracts to analyze
 The whole point of this project is to skip the boring part. And manual filtering of results even if simple, is boring.
 It is thus important to have a process to flag "exploitable" contracts, to reduce analysis and manual inspection time.
@@ -103,26 +103,6 @@ Reflection flags are used to flag all the components of a multi-contract protoco
 This is just the first version, other flags will hopefully be imagined and added — suggestions are highly appreciated.
 
 
-#### Diamond Proxy
-Not supported at the moment.
-
-#### PM2
-The architecture is modular and PM2 is used to manage the module instances. The modules run independently, but may rely on the results of other modules.
-
-"startall" script runs all the modules with a hygienic restart every few hours/days depending on the module. Note: Major chains bootstrapping might lead in a ton of calls in the first days. It is thus suggested to avoid starting all the modules together with a new database if number of RPC calls is a concern.
-
-#### Save compiled AST instead of source code
-Slither compiles the contracts before their analysis, and compilation time can easily be longer than the analysis time. Saving the compiled AST on the database and feeding it to Slither instead of the source code, would speed up subsequent analysis a lot.
-
-Unluckily Slither deprecated the AST input feature years ago.
-
-#### Fail rate
-Around 5% overall, not really an issue. Detectors fail (edge cases even if everything seems handled) happpens more often than compilation fail (the same solc version used to verify the source code on etherscan is fed to Slither to use for compilation)
-
-#### Unverified contracts
-Verified percentage is around 50% (even higher on Arbitrum) - unique contracts (no same code clones) vs unverified (maybe clones) seen in the same timeframe.
-Higher than I originally expected.
-
 #### Scalability 
 ###### Database Size
 With the pruner active, contracts on ETH,BSC,POLY,ARB are slightly more than 1 million. Database size seems totally manageable with a small machine.
@@ -136,7 +116,30 @@ This does not apply for major chains bootstrapping which might lead to a ton of 
 
 ###### Source code gathering & verified rechecks
 Regarding the source code gathering, the free tier of etherscan/bscscan/polygonscan/arbiscan is enough to do the job. 
-They provide 100k calls per day, enough to both get new contracts and re-check old contracts to see if they got verified after some time. The database keeps track of unverified smart contracts, and recheck them only once in X days - if they happen to be again in new blocks.
+They provide 100k calls per day, enough to both get new contracts and re-check old contracts to see if they got verified after some time. The database keeps track of unverified smart contracts, and recheck them only once in BLOCK_PARSER_VERIFIED_RECHECK_DAYS days - if they happen to be again in new blocks.
+
+#### Save compiled AST instead of source code
+Slither compiles the contracts before their analysis, and compilation time can easily be longer than the analysis time. Saving the compiled AST on the database and feeding it to Slither instead of the source code, would speed up subsequent analysis a lot.
+
+Unluckily Slither deprecated the AST input feature years ago.
 
 #### Slither custom detector
 Writing Slither custom detectors one should be careful to account for every edge case. A fail of a single detector lets the analysis fail also for the other detectors.
+
+
+## Side Considerations
+
+#### Unverified contracts
+Verified percentage is around 50% (even higher on Arbitrum) - unique contracts (no same code clones) vs unverified (maybe clones) seen in the same timeframe.
+Higher than I originally expected.
+
+#### Diamond Proxy
+Not supported at the moment.
+
+#### Fail rate
+Around 5% overall, not really an issue. Detectors fail (edge cases even if everything seems handled) happpens more often than compilation fail (the same solc version used to verify the source code on etherscan is fed to Slither to use for compilation)
+
+#### PM2
+The architecture is modular and PM2 is used to manage the module instances. The modules run independently, but may rely on the results of other modules.
+
+"startall" script runs all the modules with a hygienic restart every few hours/days depending on the module. Note: Major chains bootstrapping might lead in a ton of calls in the first days. It is thus suggested to avoid starting all the modules together with a new database if number of RPC calls is a concern.

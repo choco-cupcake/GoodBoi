@@ -103,9 +103,11 @@ async function updateProxyImplAddress(conn, chain, cID, implAddress, isChanged){
     }
     if(isChanged && implAddress != "0x0"){ 
       // add address to DB if not yet parsed
-      if(!await getFromParsedPool(conn, chain, implAddress, true)){
+      let alreadyParsed = await getFromParsedPool(conn, chain, implAddress)
+      if(!alreadyParsed || !alreadyParsed.length){
         await pushAddressToParsedTable(conn, chain, addr)
         await pushAddressToPoolTable(conn, chain, addr, 'addresspool', true)
+        console.log("Newly discovered implementation pushed to addresspool: " + implAddress)
       }
     }
     return true
@@ -358,7 +360,7 @@ async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20H
 async function flagContractBalance(conn, chain, contractAddress, implAddress){
   let query = "UPDATE contract set balanceFlag=1 WHERE chain=?"
   let queryParams = [chain, contractAddress]
-  if(implAddress.length){ // if this is a proxy, also flag the implementation
+  if(implAddress && implAddress.length){ // if this is a proxy, also flag the implementation
     query += " AND (address=? OR address=?)"
     queryParams.push(implAddress)
   }

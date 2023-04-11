@@ -101,7 +101,8 @@ async function updateProxyImplAddress(conn, chain, cID, implAddress, isChanged){
       Utils.printQueryError(query, queryParams, "Error updating implAddress")
       return false
     }
-    if(isChanged && implAddress != "0x0"){ // add address to DB if not yet parsed
+    if(isChanged && implAddress != "0x0"){ 
+      // add address to DB if not yet parsed
       if(!await getFromParsedPool(conn, chain, implAddress, true)){
         await pushAddressToParsedTable(conn, chain, addr)
         await pushAddressToPoolTable(conn, chain, addr, 'addresspool', true)
@@ -329,7 +330,7 @@ async function getHashFromDB(conn, h){
   }
 }
 
-async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20Holdings, eth_balance){
+async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20Holdings, eth_balance, implAddress){
   let pruned = await checkPruneContract(conn, chain, contractAddress, totalUSDValue)
   if(pruned){
     console.log("pruned ", chain, " - ", contractAddress)
@@ -344,7 +345,7 @@ async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20H
       return false
     }
     if(Number(totalUSDValue) > process.env.FLAGGER_MIN_BALANCE){
-      await flagContractBalance(conn, chain, contractAddress)
+      await flagContractBalance(conn, chain, contractAddress, implAddress)
     }
     return true
   }
@@ -354,10 +355,18 @@ async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20H
   }
 }
 
-async function flagContractBalance(conn, chain, contractAddress){
-  let query = "UPDATE contract set balanceFlag=1 WHERE chain=? AND address=?"
+async function flagContractBalance(conn, chain, contractAddress, implAddress){
+  let query = "UPDATE contract set balanceFlag=1 WHERE chain=?"
+  let queryParams = [chain, contractAddress]
+  if(implAddress.length){ // if this is a proxy, also flag the implementation
+    query += " AND (address=? OR address=?)"
+    queryParams.push(implAddress)
+  }
+  else{
+    query += " AND address=?"
+  }
   try{
-    let [data, fields] = await conn.query(query, [chain, contractAddress]);
+    let [data, fields] = await conn.query(query, queryParams);
     if(!data.affectedRows){
       Utils.printQueryError(query, block, "Error flagging balance")
       return false
@@ -373,9 +382,9 @@ async function flagContractBalance(conn, chain, contractAddress){
 async function checkPruneContract(conn, chain, contractAddress, totalUSDValue){
   if(process.env.CONTRACT_PRUNER_ENABLED && Number(totalUSDValue) < Number(process.env.CONTRACT_PRUNER_MIN_BALANCE)){
     // check if to prune
-    let query = "SELECT ((lastTx + INTERVAL ? day) <= NOW() AND addressVars IS NULL) AS toPrune FROM contract WHERE address = ? AND `chain` = ?"; // TODO change addressVars IS NULL to poolFlag=0 if db grows too large (unflagged but with addressVars might still be interesting) 
+    let query = "SELECT ((lastTx + INTERVAL ? day) <= NOW() AND addressVars IS NULL AND address NOT IN (SELECT implAddress FROM contract WHERE chain=?)) AS toPrune FROM contract WHERE address = ? AND `chain` = ?"; // TODO change addressVars IS NULL to poolFlag=0 if db grows too large (unflagged but with addressVars might still be interesting) 
     try{
-      let [data, fields] = await conn.query(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, contractAddress, chain]); 
+      let [data, fields] = await conn.query(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, chain, contractAddress, chain]); 
       if(!data.length){
         Utils.printQueryError(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, contractAddress, chain], "Error checking contract pruning - row not found")
         return false
@@ -536,7 +545,7 @@ async function getContract(conn, chain, address){
 }
 
 async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
-let query = "SELECT b.ID, b.address FROM balances AS b, contract AS c WHERE b.`chain`=? AND b.lastUpdate < NOW() - INTERVAL ? DAY AND c.address=b.address AND c.`chain`=b.`chain` ORDER BY c.lastTx ASC LIMIT ? "
+let query = "SELECT b.ID, b.address, c.implAddress FROM balances AS b, contract AS c WHERE b.`chain`=? AND b.lastUpdate < NOW() - INTERVAL ? DAY AND c.address=b.address AND c.`chain`=b.`chain` ORDER BY c.lastTx ASC LIMIT ? "
   try{
     let [data, fields] = await conn.query(query, [chain, daysOld, +batchSize]);
     return data

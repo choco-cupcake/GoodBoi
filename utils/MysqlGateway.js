@@ -105,8 +105,8 @@ async function updateProxyImplAddress(conn, chain, cID, implAddress, isChanged){
       // add address to DB if not yet parsed
       let alreadyParsed = await getFromParsedPool(conn, chain, implAddress)
       if(!alreadyParsed || !alreadyParsed.length){
-        await pushAddressToParsedTable(conn, chain, addr)
-        await pushAddressToPoolTable(conn, chain, addr, 'addresspool', true)
+        await pushAddressToParsedTable(conn, chain, implAddress)
+        await pushAddressToPoolTable(conn, chain, implAddress, 'addresspool', true)
         console.log("Newly discovered implementation pushed to addresspool: " + implAddress)
       }
     }

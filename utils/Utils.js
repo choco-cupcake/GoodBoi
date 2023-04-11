@@ -159,12 +159,22 @@ class Utils {
     let header = "contract " + contractName
     let inContract = false
     let stateAddressVars = [], mappingUintAddress = [], stateAddressArrays = []
+    let inheritedContractsVarsObjects = []
     outerLoop:
     for(let l of lines){
       let line = l.trim().split(";")[0].trim()
       if(!inContract){
-        if(this.startsWith(line, header))
+        if(this.startsWith(line, header)){
           inContract = true
+          if(l.includes(" is ")){
+            let t = l.split(" is ")[1]
+            let inheritedContracts = t.split("{")[0].split(",")
+            inheritedContracts = inheritedContracts.map(e => e.trim())
+            for(let ic of inheritedContracts){
+              inheritedContractsVarsObjects.push(this.getAddressVars(sourcefiles, ic))
+            }
+          }
+        }
       }
       else{
         for(let bk of breakingKeywords){
@@ -183,9 +193,30 @@ class Utils {
         }
       }
     }
+    for(let icObj of inheritedContractsVarsObjects){
+      if(icObj){
+        for(let icSAV of icObj.SAV)
+          if(!this.isVarContained(stateAddressVars, icSAV)) // if not shadowed
+            stateAddressVars.push(icSAV)
+        for(let icSAA of icObj.SAA)
+          if(!this.isVarContained(stateAddressArrays, icSAA))
+          stateAddressArrays.push(icSAA)
+        for(let icSAM of icObj.SAM)
+          if(!this.isVarContained(mappingUintAddress, icSAM))
+          mappingUintAddress.push(icSAM)
+      }
+    }
     if(!stateAddressVars.length && !mappingUintAddress.length && !stateAddressArrays.length)
       return null
     return {SAV: stateAddressVars, SAA: stateAddressArrays, SAM: mappingUintAddress}
+  }
+
+  static isVarContained(arr, varName){
+    for(let e of arr){
+      if(e.name == varName.name)
+        return true
+    }
+    return false
   }
 
   static getUintSize(mappingLine){

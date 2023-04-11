@@ -6,19 +6,19 @@
 Scraper of EVM compatible Smart Contracts' verified sources and runner of Slither custom detectors on the SC Database
 
 ### Use Cases
-- Look for vulnerable patterns made up taking inspirations from smart contracts being audited, or from hacks happened in the wild — low precision and manual filtering. 
+- GoodBoi can be used to identify vulnerable patterns in smart contracts, drawing inspiration from audited contracts and hacks happened in the wild — low precision and manual filtering. 
 
-- Look for any specific set of contracts due to any research. Different analysis tools other than Slither might be implemented in the future, I'm focusing on Slither first because it enables high expressivity and it's blazing fast.
+- GoodBoi can also be used to search for specific sets of contracts based on research requirements. While Slither is currently the primary focus due to its high expressivity and fast performance, other analysis tools may be implemented in the future.
 
 ### Usage
-Server:
+##### Server
 ````
 npm run startall
 ````
-Note: Major chains bootstrapping might lead to a ton of calls in the first days. It is thus suggested to avoid starting all the modules together with a new database if number of calls is a concern.
+Note: Major chains bootstrapping might lead to a ton of calls in the first days. It is thus suggested to avoid starting all the modules together with a new database, if the number of calls is a concern.
 
 
-Analysis machine:
+##### Analysis machine
 ````
 node services/slitherRunner.js
 ````
@@ -27,26 +27,30 @@ node services/slitherRunner.js
 <p align="center">
   <img src="https://github.com/choco-cupcake/GoodBoi/raw/main/media/Architecture_2.png?raw=true" alt="Architecture Design" width="700px"/>
 </p>
+<p align="center">
+  Main Database tables and modules
+</p>
 
 ### Modules description
 ##### Block Parser
-Parses 'to' addresses from recent blocks. To reduce the RPC calls, an aggregator smart contract has been deployed on each chain. This contract contains a function that gets an array of addresses as input and provides a bool mask as output that tells if each address is a smart contract - EOAs are then discarded.
+The Block Parser module is responsible for parsing 'to' addresses from recent blocks. To minimize RPC calls, an aggregator smart contract has been deployed on each chain. This contract contains a function that takes an array of addresses as input and provides a boolean mask as output, indicating if each address is a smart contract. EOAs (Externally Owned Accounts) are discarded accordingly.
 ##### Source Getter
-Downloads the source codes from etherscan, bscscan, polygonscan through their APIs.
+The Source Getter module  downloads the source codes from etherscan, bscscan, polygonscan through their APIs.
 
-The recheck feature if enabled, rechecks unverified contracts once every BLOCK_PARSER_VERIFIED_RECHECK_DAYS days, if they happen again in new blocks. So if a contract gets verified few days after deployment, we won't miss it. It would make sense to stop rechecking after a while, but at the moment the system can handle this volume of calls.
+If the recheck feature is enabled, unverified contracts are rechecked once every BLOCK_PARSER_VERIFIED_RECHECK_DAYS days if they appear in new blocks. This ensures that contracts that are verified after deployment are not missed. Although it may be wise to stop rechecking after a while, the system is currently capable of handling the volume of calls.
 
-The source code is analyzed to get from the main contract the public state variables of type address, address[], mapping(unitXXX => address) and save them in a JSON on the database. This is used to check for the PoolFlag, see section Notes.AnalysisFlags.
+The source code is analyzed to extract the public state variables of type address, address[], mapping(unitXXX => address) from the contract and save them in a JSON format in the database. This information is used to check for the PoolFlag, as described in the Notes.AnalysisFlags section.
+
+The process of variable extracting is done through Regex and text analysis, under the assumption that the state variables are properly placed before constructor/functions/modifiers/etc . Ideally a custom Slither detector would be used, but that does not scale that well.
 ##### Balance Getter
-For each contract, gets the native ether balance plus the balance of the top 80 ERC20 tokens, then convert everything to USD and saves the informations on the database. Contracts having an overall usdVal >= FLAGGER_MIN_BALANCE get the BalanceFlag activated. The BalanceFlag will be used to decide which contracts will be analyzed, more in section section Notes.AnalysisFlags.
-To reduces the RPC calls, a balances aggregator smart contract is used.
+The Balance Getter module retrieves the native ether balance and the balance of the top ~80 ERC20 tokens for each contract. The balances are then converted to USD and stored in the database. Contracts with an overall USD value greater than or equal to FLAGGER_MIN_BALANCE have the BalanceFlag activated. The BalanceFlag is used to determine which contracts will be analyzed, as explained in the Notes.AnalysisFlags section.
+To reduces the RPC calls, a balances aggregator smart contract is utilized.
 
-The contract pruning feature allows you to prune contracts according to the rule (0 balance AND lastTx older than X days AND not flagged AND if this contract is an implementation, the same checks apply for the proxy contract). Pruning happens during balance checks.
+The contract pruning feature allows contracts to be pruned based on the rule (0 balance AND lastTx older than X days AND not flagged AND is not the implementation of a non-pruned contract). Pruning occurs during balance checks.
 ##### State Variables Reader
-This module gets from the blockchain the address value of the public address variables in each contract. The contract GetValueAggregator is used to minimize the RPC calls. This module also launches the PoolFlagger, described later.
-Module used to check for the PoolFlag, more in section Notes.AnalysisFlags.
+The State Variables Reader module retrieves the address values of public address variables in each contract from the blockchain. The GetValueAggregator contract is used to minimize RPC calls. This module also launches the PoolFlagger, used to check for the PoolFlag, as detailed in the Notes.AnalysisFlags section.
 ##### Proxy Implementation Reader
-This module checks the eip1967 implementation storage slot for contracts having "proxy" in their name or flagged as proxy by etherscan. Proxy and implementation will get tied on the database. It is used to analyze proxy contracts using the implementation code, and to perform PoolFlagging and contract pruning when proxy pattern is used.
+The Proxy Implementation Reader module checks the eip1967 implementation storage slot for contracts with "proxy" in their name or flagged as proxy by etherscan. Proxy and implementation contracts are linked in the database. This module is used to properly perform Pool/BalanceFlagging and contract pruning when the proxy pattern is utilized.
 ##### Pool Flagger
 This module activates the PoolFlag if a contract: 
 - is an ERC20 with a pool (against WETH)
@@ -69,9 +73,9 @@ Note: Where it is straightforward (UniV2 and UniV2-like), pools are filtered by 
 Reflects Flags, see section Notes.AnalysisFlags
 
 ##### Slither Runner
-Runs slithers instances in parallel and save results on the database. Given a set of detectors to be used, for each contract only the detectors not yet used on that contract are used in the analysis. 
+The Slither Runner module is designed to run Slither instances in parallel and save the results to the database. It takes a set of detectors as input and uses only the detectors that have not been used on a contract before, in order to analyze the contract. 
 
-At the moment the analysis module is run spot when needed, but on the long run once I have multiple custom detectors it's meant to be always up looking for hits on the new contracts parsed every day.
+Currently, the analysis module is run on demand, but in the future, when there are multiple custom detectors available, it will be designed to run continuously, actively searching for hits on newly parsed contracts on a daily basis.
 
 ##### Analysis Results UI
 Still using raw queries while collecting requirements before building
@@ -84,39 +88,38 @@ Still using raw queries while collecting requirements before building
 ## Main Notes
 #### Analysis Flags - How to choose which contracts to analyze
 The whole point of this project is to skip the boring part. And manual filtering of results even if simple, is boring.
-It is thus important to have a process to flag "exploitable" contracts, to reduce analysis and manual inspection time.
+It is thus important to have a process to flag exploitable contracts, to reduce analysis and manual inspection time.
 
 In this flagging process we want to be more loose than strict, as we will discard all the other contracts from the analysis.
 
 There are currently two main flags implemented:
 - PoolFlag: activated if a contract: 
 	- is an ERC20 with a pool (against WETH)
-	- contains in a storage variable (or array or uint=>address map) an address which is:
+	- contains in a storage variable (or array or (uintXXX=>address) map) an address which is:
 	  - an ERC20 with a pool
 	  - a pool
-- BalanceFlag: activated if a contract has an overall usdValue (native + top ERC20) >= FLAGGER_MIN_BALANCE
+- BalanceFlag: activated if a contract has an overall USD value (native + top ERC20) >= FLAGGER_MIN_BALANCE
 
-In addition to the main flags, there are the Reflected Flags: a contract is reflected flagged if it contains in a storage variable (or array or mapping) the address of a flagged contract. PoolFlag reflects to ReflPoolFlag and BalanceFlag reflects to ReflBalanceFlag.
+In addition, there are Reflected Flags, which flag contracts that contain the address of a flagged contract in a storage variable, array, or mapping. PoolFlag reflects to ReflPoolFlag, and BalanceFlag reflects to ReflBalanceFlag.
 
-Reflection flags are used to flag all the components of a multi-contract protocol, where just a single component is BalanceFlagged or PoolFlagged.
+Reflection flags are used to flag all components of a multi-contract protocol when a single component is flagged with PoolFlag or BalanceFlag.
 
-This is just the first version, other flags will hopefully be imagined and added — suggestions are highly appreciated.
-
+GoodBoi is continuously being improved, and suggestions for additional flags are highly appreciated.
 
 #### Scalability 
 ###### Database Size
-With the pruner active, contracts on ETH,BSC,POLY,ARB are slightly more than 1 million. Database size seems totally manageable with a small machine.
+With the pruner active, the number of contracts on ETH, BSC, POLY, and ARB is slightly over 1 million, which is manageable even on small machines.
 
 ###### Slither analysis time
-Slither is quite fast and analysis can be scaled on multiple machines or on fat cloud machines. Anyway, flagged contracts at the moment are below 100k, which I can analyze on my laptop while working on it, in under 24 hours (around 100 analysis per minute). 
+Slither is quite fast and analysis can be scaled on multiple machines. Currently, the number of flagged contracts is below 100k, which can be analyzed on a regular laptop in under 24 hours (around 100 analyses per minute) while working on it.
 
 ###### RPC calls rate
-Blockchain read calls (balances and scraping) are kept low thanks to the use of aggregator contracts, so the free tier of multiple RPC providers is enough. 
-This does not apply for major chains bootstrapping which might lead to a ton of calls in the first days. It is thus suggested to avoid starting all the modules together with a new database if the number of calls is a concern.
+Blockchain read calls are kept low by using aggregator contracts. This allows the project to operate using the free tier of multiple RPC providers. 
+
+However, during the initial bootstrapping of major chains, there may be a high volume of calls, so it is suggested to avoid starting all the modules together with a new database if the number of calls is a concern.
 
 ###### Source code gathering & verified rechecks
-Regarding the source code gathering, the free tier of etherscan/bscscan/polygonscan/arbiscan is enough to do the job. 
-They provide 100k calls per day, enough to both get new contracts and re-check old contracts to see if they got verified after some time. The database keeps track of unverified smart contracts, and recheck them only once in BLOCK_PARSER_VERIFIED_RECHECK_DAYS days - if they happen to be again in new blocks.
+GoodBoi uses the free tier of etherscan/bscscan/polygonscan/arbiscan to gather source code and verify contracts. These free tiers provide 100k calls per day, which is sufficient to obtain new contracts and re-check old contracts for verification status. The database keeps track of unverified smart contracts and rechecks them only once every BLOCK_PARSER_VERIFIED_RECHECK_DAYS days, if they appear again in new blocks.
 
 #### Save compiled AST instead of source code
 Slither compiles the contracts before their analysis, and compilation time can easily be longer than the analysis time. Saving the compiled AST on the database and feeding it to Slither instead of the source code, would speed up subsequent analysis a lot.
@@ -124,8 +127,7 @@ Slither compiles the contracts before their analysis, and compilation time can e
 Unluckily Slither deprecated the AST input feature years ago.
 
 #### Slither custom detector
-Writing Slither custom detectors one should be careful to account for every edge case. A fail of a single detector lets the analysis fail also for the other detectors.
-
+When writing custom detectors for Slither, it is important to account for every edge case. A failure of a single detector will cause the analysis to fail for other detectors as well.
 
 ## Side Considerations
 
@@ -134,12 +136,12 @@ Verified percentage is around 50% (even higher on Arbitrum) - unique contracts (
 Higher than I originally expected.
 
 #### Diamond Proxy
-Not supported at the moment.
+Not currently supported.
 
 #### Fail rate
-Around 5% overall, not really an issue. Detectors fail (edge cases even if everything seems handled) happpens more often than compilation fail (the same solc version used to verify the source code on etherscan is fed to Slither to use for compilation)
+The overall analysis failure rate is around 5%, with detector failures (edge cases hell) occurring more frequently than compilation failures (the same solc version used to verify the source code on etherscan is fed to Slither to use for compilation)
 
 #### PM2
-The architecture is modular and PM2 is used to manage the module instances. The modules run independently, but may rely on the results of other modules.
+GoodBoi's architecture is modular and PM2 is used to manage the instances of the modules. The modules run independently, but may rely on results from other modules.
 
-"startall" script runs all the modules with a hygienic restart every few hours/days depending on the module. Note: Major chains bootstrapping might lead in a ton of calls in the first days. It is thus suggested to avoid starting all the modules together with a new database if number of RPC calls is a concern.
+"startall" script runs all the modules with a hygienic restart every few hours/days depending on the module. 

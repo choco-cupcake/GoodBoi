@@ -166,17 +166,22 @@ async function getAllQuotes(){
 async function _getAllQuotes(){
   console.log("Getting ERC20 quotes");
   for(let i=1; i < ERC20_of_interest.length; i++){ // skip native ETH. kept in the same struct bc price aggregator contract accepts it
+    let start = Date.now()
     let r = await moralisGetPriceUSD(ERC20_of_interest[i].address)
-    if(!isNaN(r?.data?.usdPrice)){
-      ERC20_of_interest[i]['USD_price'] = r.data.usdPrice
+    if(!isNaN(r?.jsonResponse?.usdPrice)){
+      ERC20_of_interest[i]['USD_price'] = r.jsonResponse.usdPrice
       if(i == 1)
-        ERC20_of_interest[0]['USD_price'] = r.data.usdPrice // assign wrapped token value to native token
+        ERC20_of_interest[0]['USD_price'] = r.jsonResponse.usdPrice // assign wrapped token value to native token
     }
     else{
       console.log("ERROR getting fresh price for token " + ERC20_of_interest[i].token, "Fix and retry")
       process.exit()
     }
     console.log("#" + i + " " + ERC20_of_interest[i].token + " : " + ERC20_of_interest[i]['USD_price'] + "$");
+    let elapsed = Date.now() - start
+    if(elapsed < 500){
+      await Utils.sleep(500 - elapsed) // Moralis just updated the req and rates limits for the free tier, there is now room for 2.5 getPrice reqs/sec
+    }
   }
 }
 

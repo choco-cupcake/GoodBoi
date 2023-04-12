@@ -37,6 +37,8 @@ The Block Parser module is responsible for parsing 'to' addresses from recent bl
 ##### Source Getter
 The Source Getter module  downloads the source codes from etherscan, bscscan, polygonscan through their APIs.
 
+The files downloaded are hashed to avoid duplicates.
+
 If the recheck feature is enabled, unverified contracts are rechecked once every BLOCK_PARSER_VERIFIED_RECHECK_DAYS days if they appear in new blocks. This ensures that contracts that are verified after deployment are not missed. Although it may be wise to stop rechecking after a while, the system is currently capable of handling the volume of calls.
 
 The source code is analyzed to extract the public state variables of type address, address[], mapping(unitXXX => address) from the contract and save them in a JSON format in the database. This information is used to check for the PoolFlag, as described in the Notes.AnalysisFlags section.
@@ -74,6 +76,8 @@ Reflects Flags, see section Notes.AnalysisFlags
 
 ##### Slither Runner
 The Slither Runner module is designed to run Slither instances in parallel and save the results to the database. It takes a set of detectors as input and uses only the detectors that have not been used on a contract before, in order to analyze the contract. 
+
+Analyses are minimized by aggregating contracts by their sourcefiles signatures: clone contracts are analyzed only once.
 
 Currently, the analysis module is run on demand, but in the future, when there are multiple custom detectors available, it will be designed to run continuously, actively searching for hits on newly parsed contracts on a daily basis.
 

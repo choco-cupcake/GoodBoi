@@ -156,7 +156,7 @@ class Utils {
     const arrRegex = /^(address|ERC20|IERC20)\[\] public / 
     const mappingRegex = /^mapping ?\( ?uint(256|128|64|32|16|8) ?=> ?(address|ERC20|IERC20)\) public / // same for pools
     let lines = desiredContract.split("\n")
-    let header = "contract " + contractName
+    let header = "contract " + contractName + " "
     let inContract = false
     let stateAddressVars = [], mappingUintAddress = [], stateAddressArrays = []
     let inheritedContractsVarsObjects = []

@@ -1,5 +1,5 @@
 const uninteresting_vars = { // blacklist for address and address[] - exclude
-  exact: ["shop"], // prefix
+  exact: ["shop", "members"], // prefix
   anypos: ["factory", "operator", "admin", "owner", // in any position
     "marketing", "receiver", "recipient", "dead", "router", 
     "fee", "logic", "treasury", "dev", "burn", "governance", 

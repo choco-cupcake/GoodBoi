@@ -269,7 +269,7 @@ class Utils {
   }
 
   static startsWith(str, patt){
-    str = str.substring(0, patt.length)
+    str = str.substring(0, patt.length + 1)
     for(let post of [" ", "{", "[", "(", ";"])
       if(str == patt + post)
         return true

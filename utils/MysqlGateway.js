@@ -927,8 +927,10 @@ async function pushAddressesToPoolBatch(conn, chain, addressesList){
   if(toInsert.length)
     await pushAddressToPoolTableBatch(conn, chain, toInsert, 'addresspool')
   
-  if(toUpdateLastTx.length)
-    await updateLastTxBatch(conn, chain, toUpdateLastTx)
+  if(toUpdateLastTx.length){
+    for(let a of toUpdateLastTx.map(e => e.toLowerCase()))
+      await updateLastTx(conn, chain, a)
+  }
 
   console.log(newAddresses.length + " of " + addressesList.length + " new contracts added to db, " + toRecheck.length + " rechecks")
 }

@@ -102,9 +102,10 @@ There are currently two main flags implemented:
 	- contains in a storage variable (or array or (uintXXX=>address) map) an address which is:
 	  - an ERC20 with a pool
 	  - a pool
+	
+	Note: A proxy contract will be pool analyzed according to its implementation source code and variables.
 - BalanceFlag: activated if a contract has an overall USD value (native + top ERC20) >= FLAGGER_MIN_BALANCE
-
-In addition, there are Reflected Flags, which flag contracts that contain the address of a flagged contract in a storage variable, array, or mapping. PoolFlag reflects to ReflPoolFlag, and BalanceFlag reflects to ReflBalanceFlag.
+- Reflected Flags: flag contracts that contain the address of a flagged contract in a storage variable, array, or mapping. PoolFlag reflects to ReflPoolFlag, and BalanceFlag reflects to ReflBalanceFlag.
 
 Reflection flags are used to flag all components of a multi-contract protocol when a single component is flagged with PoolFlag or BalanceFlag.
 

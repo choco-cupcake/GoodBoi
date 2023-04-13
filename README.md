@@ -69,7 +69,9 @@ AMM checked for pools:
 - Polygon: UniV3, Quickswap, BalancerV2
 - Arbitrum: UniV3
 
-Note: Where it is straightforward (UniV2 and UniV2-like), pools are filtered by WETH liquidity to be at least FLAGGER_CONTRACT_MIN_POOL_USD. In the future it would be nice to extend this feature to the other protocols.
+Where it is straightforward (UniV2 and UniV2-like), pools are filtered by WETH liquidity to be at least FLAGGER_CONTRACT_MIN_POOL_USD. In the future it would be nice to extend this feature to the other protocols.
+
+Note: A proxy contract will be pool analyzed according to its implementation source code and variables.
 
 ##### Flags Reflector
 Reflects Flags, see section Notes.AnalysisFlags
@@ -80,6 +82,8 @@ The Slither Runner module is designed to run Slither instances in parallel and s
 Analyses are minimized by aggregating contracts by their sourcefiles signatures: clone contracts are analyzed only once.
 
 Currently, the analysis module is run on demand, but in the future, when there are multiple custom detectors available, it will be designed to run continuously, actively searching for hits on newly parsed contracts on a daily basis.
+
+Since custom detectors development is incremental to filter out false positives while conducting manual inspection on hits, this module allows for the argument flag "--refilter DETECTOR_NAME", to only re-analyze hits previously detected by the provided custom detector.
 
 ##### Analysis Results UI
 Still using raw queries while collecting requirements before building
@@ -106,7 +110,6 @@ There are currently two main flags implemented:
 	Note: A proxy contract will be pool analyzed according to its implementation source code and variables.
 - BalanceFlag: activated if a contract has an overall USD value (native + top ERC20) >= FLAGGER_MIN_BALANCE
 - Reflected Flags: flag contracts that contain the address of a flagged contract in a storage variable, array, or mapping. PoolFlag reflects to ReflPoolFlag, and BalanceFlag reflects to ReflBalanceFlag.
-
 Reflection flags are used to flag all components of a multi-contract protocol when a single component is flagged with PoolFlag or BalanceFlag.
 
 GoodBoi is continuously being improved, and suggestions for additional flags are highly appreciated.

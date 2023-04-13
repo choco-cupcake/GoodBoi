@@ -927,10 +927,8 @@ async function pushAddressesToPoolBatch(conn, chain, addressesList){
   if(toInsert.length)
     await pushAddressToPoolTableBatch(conn, chain, toInsert, 'addresspool')
   
-  if(toUpdateLastTx.length){
-    for(let a of toUpdateLastTx.map(e => e.toLowerCase()))
-      await updateLastTx(conn, chain, a)
-  }
+  if(toUpdateLastTx.length)
+    await updateLastTxBatch(conn, chain, toUpdateLastTx)
 
   console.log(newAddresses.length + " of " + addressesList.length + " new contracts added to db, " + toRecheck.length + " rechecks")
 }
@@ -939,7 +937,7 @@ async function updateLastTxBatch(conn, chain, addressBatch){
   addressList = "('" + addressBatch.map(e => e.toLowerCase()).join("','") + "')"
   let query = "UPDATE contract SET lastTx = NOW() WHERE chain = ? AND LOWER(address) IN " + addressList + ";"
   let err = 0
-  while(err < 3){ // hack for deadlock issues inspected but not understood - most of the times 2 try is enough and is not worsening performances
+  while(err < 5){ // hack for deadlock issues inspected but not understood - most of the times 2 try is enough and is not worsening performances
     try{
       let [data, fields] = await conn.query(query, chain);
       break;

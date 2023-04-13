@@ -5,4 +5,4 @@ const detectrs_slither_badcode = ["tautology", "write-after-write", "divide-befo
 
 const custom_detectors = ["unprotected-write"]
 
-module.exports = {custom_detectors, detectors_slither_high, detectrs_slither_badcode}
+module.exports = {custom_detectors}

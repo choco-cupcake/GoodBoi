@@ -194,7 +194,7 @@ async function keepAlive(conn){
 }
 
 async function addSlitherAnalysisColumns(conn, columnName){
-  let query = "ALTER TABLE slither_analysis ADD COLUMN `" + columnName + "` TINYINT DEFAULT -1 AFTER failedAnalysis, ADD COLUMN `rep_" + columnName + "` TEXT AFTER failedAnalysis;"
+  let query = "ALTER TABLE slither_analysis ADD COLUMN `" + columnName + "` TINYINT DEFAULT -1 AFTER failedAnalysis, ADD COLUMN `rep_" + columnName + "` TEXT, ADD COLUMN `falsePos_" + columnName + "` TINYINT DEFAULT 0 AFTER failedAnalysis;"
   try{
     await conn.query(query);
     return true
@@ -206,7 +206,7 @@ async function addSlitherAnalysisColumns(conn, columnName){
 }
 
 async function getSlitherAnalysisColumns(conn){
-  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis' AND `COLUMN_NAME` NOT IN ('ID','sourcefile_signature','failedAnalysis','report','error','analysisDate');"
+  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis' AND `COLUMN_NAME` NOT IN ('ID','sourcefile_signature','failedAnalysis','error','analysisDate');"
   try{
     let [data, fields] = await conn.query(query)
     if(!data.length){
@@ -642,7 +642,7 @@ async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors, refil
       // get files
       let files = data.filter(e => e.contract == c.ID)
       // exclude already run detectors
-      let usedDetectors = Object.keys(files[0]).filter(e => !['sourcefile_signature', 'filename',  'ID',  'sourceText',  'sourceHash',  'failedAnalysis',  'report'].includes(e) && files[0][e] != '-1')
+      let usedDetectors = Object.keys(files[0]).filter(e => !['sourcefile_signature', 'filename',  'ID',  'sourceText',  'sourceHash',  'failedAnalysis'].includes(e) && files[0][e] != '-1')
       let detectorsToUse = refilterDetector ? [refilterDetector] : detectors.filter(e => !usedDetectors.includes(e)) // detectors set by the user - detectors already run on this contract
       returnData.push({ID: c.ID, files: files, detectors: detectorsToUse, sourcefile_signature: c.sourcefile_signature})
 
@@ -858,7 +858,7 @@ async function pushSourceFiles(conn, chain, contractObj, contractAddress){
 
 async function insertAnalysisRecord(conn, hashedSignature){
   // insert empty
-  let query = "INSERT INTO slither_analysis (sourcefile_signature, report, error) VALUES (?, '', '')"
+  let query = "INSERT INTO slither_analysis (sourcefile_signature, error) VALUES (?, '')"
   await performInsertQuery(conn, query, hashedSignature, true) // ignore if sourcefile_signatre already in db
 }
 

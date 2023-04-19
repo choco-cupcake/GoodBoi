@@ -152,7 +152,7 @@ class Utils {
     // assumption: state vars are declared before constructor/modifiers/functions. 
     // This should hold on properly written contracts (handling decent amount of money)
     const breakingKeywords = ["constructor", "function", "modifier", "receive", "fallback"]
-    const varRegex = /^(address|ERC20|IERC20) public / // tokens vars are public most of the times. this also simplifies the value retrieval
+    const varRegex = /^(address|ERC20|I[a-zA-Z0-9]{1,20}) public / // tokens vars are public most of the times. this also simplifies the value retrieval
     const arrRegex = /^(address|ERC20|IERC20)\[\] public / 
     const mappingRegex = /^mapping ?\( ?uint(256|128|64|32|16|8) ?=> ?(address|ERC20|IERC20)\) public / // same for pools
     let lines = desiredContract.split("\n")

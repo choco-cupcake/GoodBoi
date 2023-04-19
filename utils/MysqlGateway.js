@@ -194,7 +194,7 @@ async function keepAlive(conn){
 }
 
 async function addSlitherAnalysisColumns(conn, columnName){
-  let query = "ALTER TABLE slither_analysis ADD COLUMN `" + columnName + "` TINYINT DEFAULT -1 AFTER failedAnalysis, ADD COLUMN `rep_" + columnName + "` TEXT, ADD COLUMN `falsePos_" + columnName + "` TINYINT DEFAULT 0 AFTER failedAnalysis;"
+  let query = "ALTER TABLE slither_analysis ADD COLUMN `" + columnName + "` TINYINT DEFAULT -1 AFTER failedAnalysis, ADD COLUMN `rep_" + columnName + "` TEXT, ADD COLUMN `manualRev_" + columnName + "` TINYINT DEFAULT 0 AFTER failedAnalysis;"
   try{
     await conn.query(query);
     return true
@@ -590,31 +590,32 @@ async function getContractFiles(conn, contractID, address, chain){
     }
   }
 
-async function getBatchToAnalyze(conn, len, chain, minUsdValue, detectors, refilterDetector){
+async function getBatchToAnalyze(conn, len, chain, detectors, refilterDetector, retryErrors){
 // analysis table analyzes sourcefile, not contract. results viewer will get related contracts
   let endOfResults = false
-  let detSub = buildDetectorsFindSubquery(detectors, refilterDetector)
+  let detSub = retryErrors ? "" : buildDetectorsFindSubquery(detectors, refilterDetector)
   let query = ''.concat(
     "SELECT DISTINCT c.sourcefile_signature, c.compilerVersion, csf.contract, csf.filename, sf.*, an.* FROM contract AS c ",
     "INNER JOIN contract_sourcefile AS csf ON csf.contract = c.ID ",
     "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
     "INNER JOIN slither_analysis AS an ON an.sourcefile_signature = c.sourcefile_signature ",
-    "INNER JOIN ( ",
-    " SELECT DISTINCT c.sourcefile_signature FROM contract AS c ",
-    minUsdValue != 0 ? "  INNER JOIN balances AS b ON b.chain = c.chain and b.address = c.address " : "",
+    "INNER JOIN ",
+    "(SELECT ID FROM contract WHERE sourcefile_signature IN ",
+    " (SELECT DISTINCT c.sourcefile_signature FROM contract AS c ",
     " INNER JOIN slither_analysis AS an ON an.sourcefile_signature = c.sourcefile_signature ",
-    " WHERE an.failedAnalysis = 0 ",
+    " WHERE ",
+    retryErrors ? " an.failedAnalysis > 0 " : " an.failedAnalysis = 0 ",
+    " AND (c.poolFlag=1 OR c.balanceFlag=1 OR c.reflPoolFlag=1 OR c.reflBalanceFlag=1)",
     chain != 'all' ? "  AND c.chain = ? " : "",
-    minUsdValue != 0 ? "  AND b.usdValue >= ? " : "",
     detSub, // keeps only contracts not yet analyzed for these detectors
+    ") ",
     refilterDetector ? "" : (" LIMIT " + len), // get full results for refiltering, not to overlap with subsequent batches
-    ") AS t1 ON c.sourcefile_signature = t1.sourcefile_signature;"
+    ") AS t1 ON c.ID = t1.ID;"
   )
 
   // build query params array
   let queryParams = []
   if(chain != 'all') queryParams.push(chain)
-  if(minUsdValue != 0) queryParams.push(minUsdValue)
 
   try{
     let [data, fields] = await conn.query(query, queryParams)

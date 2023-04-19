@@ -6,34 +6,45 @@ const Utils = require('../utils/Utils');
 const Detectors = require('../data/slither_detectors');
 const { program } = require('commander');
 
-program
-  .option('--refilter <string>', 'detector to refilter (only analyzes this detector\'s previous hits');
+program.option('--refilter <string>', 'detector to refilter (only analyzes this detector\'s previous hits');
+program.option('--retryErrors', 'detector to refilter (only analyzes this detector\'s previous hits');
+program.option('--chain <string>', 'chain to operate on');
 
 program.parse();
 const cliOptions = program.opts();
+const chain = cliOptions.chain || 'all'
+
+if(chain != 'all' && !Object.values(Utils.chains).includes(chain)){
+  console.log("Unrecognized chain, abort.")
+  process.exit()
+}
+console.log("Operating on chain: " + chain)
+
+if(cliOptions.retryErrors){
+  console.log("Retrying errored analysis")
+  cliOptions.refilter = null
+}
+
 if(cliOptions.refilter)
   console.log("Refiltering detector: " + cliOptions.refilter)
 
 const slitherInstances = process.env.SLITHER_INSTANCES
 const poolSize = slitherInstances * 100
 let mysqlConn
-let filling = false // concurrency lock pool fill
 let contractPool = []
 let analyzedCounter = 0
 let failedCounter = 0
-let detectorsOfInterest, chain, minUsdValue
+let detectorsOfInterest
 let endOfResults = false
 let activeWorkers = 0
 let startTime
-const minBalance = process.env.ANALYSIS_MIN_BALANCE
+let isFilling = false
 
-launchAnalysis('all', minBalance)
+launchAnalysis()
 
-async function launchAnalysis(_chain, _minUsdValue){ 
+async function launchAnalysis(){ 
   mysqlConn = await mysql.getDBConnection()
   detectorsOfInterest = await getActiveDetectors()
-  chain = _chain || 'all'
-  minUsdValue = _minUsdValue || 0
 
   await fillPool()
   createAnalysisFolder()
@@ -44,6 +55,7 @@ async function launchAnalysis(_chain, _minUsdValue){
     activeWorkers++
     await Utils.sleep(100)
   }
+  console.log("done")
 }
 
 async function mysqlKeepAlive(){
@@ -59,7 +71,11 @@ async function createAnalysisFolder(){ // buffer to write .sol file to feed slit
 }
 
 async function getActiveDetectors(){
-  let allDetectors = Detectors.detectors_slither_high.concat(Detectors.custom_detectors).concat(Detectors.detectrs_slither_badcode)
+  let allDetectors = []
+  // concat all the detector categories
+  for(let k of Object.keys(Detectors)){
+    allDetectors = allDetectors.concat(Detectors[k])
+  }
   let analysisColumn = (await mysql.getSlitherAnalysisColumns(mysqlConn)).map(e => 
     e.COLUMN_NAME.toLowerCase()
     )
@@ -75,6 +91,8 @@ async function getActiveDetectors(){
 async function launchWorker(){
   analyzedCounter++
   let contract = await contractPool.pop()
+  if(!contract)
+    return
   let solcPath = getSolcPath(contract.files[0].compilerVersion)
   let folderpath = preparePath(contract.files)
   _launchWorker(contract, folderpath, solcPath)
@@ -111,8 +129,8 @@ async function workerCleanup(toClean){
   }
   else{
     failedCounter++
-    console.log("Analysis of contract ID=" + toClean.contractID + " resulted in an ERROR:", toClean?.output?.error)
     let _error = parseAnalysisError(toClean?.output?.error)
+    console.log("Analysis of contract ID=" + toClean.contractID + " resulted in an ERROR:", _error)
     await mysql.markContractAsErrorAnalysis(mysqlConn, toClean.sourcefile_signature, false, _error)
   }
   await Utils.deleteFolder(toClean.folderpath.workingPath)
@@ -167,13 +185,26 @@ function _launchWorker(contract, folderpath, solcpath){
 
 
 async function fillPool(){
-  filling = true
-  let newPool = await mysql.getBatchToAnalyze(mysqlConn, poolSize, chain, minUsdValue, detectorsOfInterest, cliOptions.refilter)
+  if(isFilling){
+    console.log("Detected filling ongoing, waiting")
+    return new Promise((resolve, reject) =>{
+      let intervalCheck = setInterval(() => {
+        if(!isFilling){
+          clearInterval(intervalCheck); 
+          resolve();
+        }
+      }, 1000)
+    })
+  }
+  isFilling= true
+  console.log("Filling pool triggered")
+  let newPool = await mysql.getBatchToAnalyze(mysqlConn, poolSize, chain, detectorsOfInterest, cliOptions.refilter, cliOptions.retryErrors)
+  console.log("Filling pool done")
   endOfResults = newPool.eor
   contractPool.length = 0
   for(let c of newPool.data)
-    contractPool.push(c)
-  filling = false
+    contractPool.push(c)  
+  isFilling = false
 }
 
 function preparePath(files){

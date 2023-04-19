@@ -1,12 +1,9 @@
 const { parentPort, workerData } = require('worker_threads');
-const fs = require('fs')
 const { spawnSync } = require('child_process');
-const Utils = require('../utils/Utils');
 
 runAnalysis()
 
 async function runAnalysis(){
-  //setTimeout(() => { console.log("######## WORKER KILLED"); process.exit() }, 20000)
   let startTime = Date.now()
   let slitherOutput = await executeSlither(workerData.workingPath, workerData.analysisPath, workerData.detectors)
   if(!slitherOutput){
@@ -14,7 +11,7 @@ async function runAnalysis(){
     process.exit()
   }
   let slitherResult = inspectSlitherOutput(slitherOutput, workerData.detectors)
-  let hits = Object.keys(slitherResult.findings).filter( k => slitherResult.findings[k] == 1).join(",")
+  let hits = slitherResult.findings ? Object.keys(slitherResult.findings).filter( k => slitherResult.findings[k] == 1).join(",") : ""
   if(hits.length) console.log("hit: " + hits)
   let elapsed = Date.now() - startTime
   parentPort.postMessage({output:slitherResult, elapsed: elapsed});

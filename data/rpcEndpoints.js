@@ -37,7 +37,8 @@ const endpoints = {
                 "https://arbitrum-mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
                 "https://arb-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_ARBRPC_API_KEY,
                 "https://open-platform.nodereal.io/" + process.env.NODEREAL_ARBRPC_API_KEY + "/arbitrum-nitro/",
-                "https://arbitrum.api.onfinality.io/rpc?apikey=" + process.env.ONFINALITY_API_KEY]
+                "https://arbitrum.api.onfinality.io/rpc?apikey=" + process.env.ONFINALITY_API_KEY,
+                "https://arbitrum-mainnet.s.chainbase.online/v1/" + process.env.CHAINBASE_API_KEY]
 }
 
 module.exports = endpoints

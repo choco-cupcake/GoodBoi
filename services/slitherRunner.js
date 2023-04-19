@@ -98,20 +98,19 @@ async function launchWorker(){
   _launchWorker(contract, folderpath, solcPath)
 }
 
-function logStatus(id, elapsedSlither){// #XXX start - speed: 78apm - avg analysis time: 1234ms - in 24h:
+function logStatus(id, elapsedSlither, hitsString){
   let elapsedTotal = Date.now() - startTime
   let speed_apm = Math.floor(analyzedCounter / (elapsedTotal / 1000 / 60)) // apm = analysis per minute
   let avgtime = Math.floor(elapsedTotal / analyzedCounter)
   let in24h = Math.floor(24 * 60 * 60 * 1000 / avgtime)
   let errorRate = Math.floor(failedCounter * 10000 / analyzedCounter) / 100
-  console.log("#" + id + " done - took " + elapsedSlither + "ms  -  speed: " + speed_apm + "apm  -  in 24h: " + in24h + "  -  error rate: " + errorRate + "%")
+  console.log("#" + id + " done - took " + elapsedSlither + "ms  -  speed: " + speed_apm + "apm  -  in 24h: " + in24h + "  -  error rate: " + errorRate + "%" + hitsString)
 
 }
 
 function getSolcPath(compVer){
   let solcVer = compVer.split("+")[0].substring(1)
   let solcFiles = fs.readdirSync("./solc-bin/windows-amd64")
-  //solc-windows-amd64-v0.4.7+commit.822622cf.exe
   for(let f of solcFiles){
     let fVer = f.split("+")[0].substring("solc-windows-amd64-v".length)
     if(fVer == solcVer)
@@ -122,7 +121,18 @@ function getSolcPath(compVer){
 
 async function workerCleanup(toClean){
   if(toClean?.elapsed){
-    logStatus(toClean.contractID, toClean.elapsed)
+    let hitsDetectors = [], hitsString = ""
+    if(toClean?.output?.success && toClean?.output?.findings){
+      for(let k of Object.keys(toClean.output.findings)){
+        if(toClean.output.findings[k].isHit != 0){
+          hitsDetectors.push(k)
+        }
+      }
+    }
+    if(hitsDetectors.length){
+      hitsString = " - Hits: " + hitsDetectors.join(", ")
+    }
+    logStatus(toClean.contractID, toClean.elapsed, hitsString)
   }
   if(toClean?.output?.success){
     await mysql.insertFindingsToDB(mysqlConn, toClean.sourcefile_signature, toClean.output)

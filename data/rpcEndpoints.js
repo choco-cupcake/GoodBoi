@@ -36,7 +36,8 @@ const endpoints = {
                 "https://floral-silent-gadget.arbitrum-mainnet.discover.quiknode.pro/" + process.env.QUICKNODE_ARBRPC_API_KEY,
                 "https://arbitrum-mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
                 "https://arb-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_ARBRPC_API_KEY,
-                "https://open-platform.nodereal.io/" + process.env.NODEREAL_ARBRPC_API_KEY + "/arbitrum-nitro/"]
+                "https://open-platform.nodereal.io/" + process.env.NODEREAL_ARBRPC_API_KEY + "/arbitrum-nitro/",
+                "https://arbitrum.api.onfinality.io/rpc?apikey=" + process.env.ONFINALITY_API_KEY]
 }
 
 module.exports = endpoints

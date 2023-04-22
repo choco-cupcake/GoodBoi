@@ -104,7 +104,7 @@ function logStatus(id, elapsedSlither, hitsString){
   let avgtime = Math.floor(elapsedTotal / analyzedCounter)
   let in24h = Math.floor(24 * 60 * 60 * 1000 / avgtime)
   let errorRate = Math.floor(failedCounter * 10000 / analyzedCounter) / 100
-  console.log("#" + id + " done - took " + elapsedSlither + "ms  -  speed: " + speed_apm + "apm  -  in 24h: " + in24h + "  -  error rate: " + errorRate + "%" + hitsString)
+  console.log(Utils.getTime() + " - #" + id + " done - took " + elapsedSlither + "ms  -  speed: " + speed_apm + "apm  -  in 24h: " + in24h + "  -  error rate: " + errorRate + "%" + hitsString)
 
 }
 

@@ -686,7 +686,7 @@ async function markContractAsErrorAnalysis(conn, sourcefile_signature, reset = f
   let query = reset ?
     "UPDATE slither_analysis AS an SET an.failedAnalysis = 0, an.error = ? WHERE an.sourcefile_signature = ?"
     :
-    "UPDATE slither_analysis AS an SET an.failedAnalysis = an.failedAnalysis + 1, an.error = ? WHERE an.sourcefile_signature = ?"
+    "UPDATE slither_analysis AS an SET an.failedAnalysis = an.failedAnalysis + 1, an.error = ?, an.analysisDate = NOW() WHERE an.sourcefile_signature = ?"
   try{
     let [data, fields] = await conn.query(query, [error, sourcefile_signature]);
     if(!data.affectedRows){

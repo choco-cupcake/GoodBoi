@@ -6,7 +6,7 @@ node_modules/
 trash/
 tmp_analysis/
 dev/
-custom_detectors/
+custom_detectors/drafts
 mysqlBackup/
 utils/chrome-win/
 scripts/contractsGetter/download/

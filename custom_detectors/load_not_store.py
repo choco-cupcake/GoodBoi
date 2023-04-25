@@ -1,36 +1,32 @@
 from typing import List, Optional
 from slither.core.cfg.node import NodeType, Node
-from slither.detectors.abstract_detector import AbstractDetector, DetectorClassification
 from slither.core.declarations import Contract, Function
 from slither.core.variables import StateVariable
 from slither.core.variables.local_variable import LocalVariable
-from slither.core.solidity_types.array_type import ArrayType
-from slither.slithir.operations import SolidityCall, InternalCall, HighLevelCall, Assignment
+from slither.detectors.abstract_detector import AbstractDetector, DetectorClassification
+from slither.slithir.operations import SolidityCall, InternalCall, HighLevelCall, Assignment, Return
 from slither.utils.output import Output
-from slither.slithir.variables import TupleVariable
 
 class StorageLoad():
-    def __init__(self, memory_var: LocalVariable, storage_var: StateVariable):
-        self.memory_var = memory_var
-        self.storage_var = storage_var
+    def __init__(self, storage_var: StateVariable, derived_vars = [], verbose = False):
+      self.storage_var = storage_var
+      self.derived_vars = derived_vars
+      self.verbose = verbose
 
+    def addDerived(self, memory_var):
+      self.derived_vars.append(memory_var)
+
+    def __str__(self): # debug
+        return 'SV:' + str(self.storage_var) + " - DV: " + str(list(map((lambda x: x.name), self.derived_vars)))
 
 class Context():
-    def __init__(self, visited: List[Node] = [], vars_state_load: List[StorageLoad] = []):
-        self.visited = visited
-        self.vars_state_load = vars_state_load
+    def __init__(self, header_returns, visited: List[Node] = [], vars_state_load: List[StorageLoad] = []):
+      self.header_returns = header_returns
+      self.visited = visited
+      self.vars_state_load = vars_state_load
 
     def __str__(self): # debug
         return 'visited' + str(self.visited)
-
-
-# == load from storage
-# node NEW VARIABLE
-# single ir
-# check that type in ir is not a std one
-# fetch right side of node str
-# check if its a state var (get contracts state var)
-# == write to storage
 
 # widespread false positives
 banned_funcs = []
@@ -56,7 +52,7 @@ def check_contract(c: Contract) -> List[StorageLoad]:
     x.is_implemented))
 
   for f in to_inspect: 
-    hits = check_function(f.entry_point, Context())
+    hits = check_function(f.entry_point, Context(f.returns, [], []))
     if len(hits):
       results_raw += hits
   return results_raw
@@ -64,51 +60,103 @@ def check_contract(c: Contract) -> List[StorageLoad]:
 
 def check_function(node: Optional[Node], ctx: Context)-> List[StorageLoad]:
   if node is None:
-    return False
+    return []
 
   if node in ctx.visited:
-    return False
+    return []
   ctx.visited.append(node)
 
   
   # check load from storage
-  if node.type == NodeType.VARIABLE:
-    if len(node.irs) == 1:
-      ir = node.irs[0]
-      if isinstance(ir, Assignment):
-        rval = ir.rvalue
-        lval = ir.lvalue
-        if isinstance(rval, StateVariable) and isinstance(lval, LocalVariable):
-          ctx.vars_state_load.append(StorageLoad(lval, rval))
+  if node.type in [NodeType.VARIABLE, NodeType.EXPRESSION]:
+    local_stored = node.local_variables_written
+    state_stored = node.state_variables_written
+    local_read = node.local_variables_read
+    state_read = node.state_variables_read
 
-  # check write to storage
-  if node.type == NodeType.EXPRESSION:
-    for ir in node.irs:
-      if isinstance(ir, Assignment):
-        lval = ir.lvalue
-        if isinstance(lval, StateVariable):
-          # remove lval state var from vars_state_load
-          for vsl in ctx.vars_state_load[:]:
-            if vsl.storage_var == lval:
-              ctx.vars_state_load.remove(vsl)
+    for lv in local_stored:
+      # add new storage read, even if not direct
+      for sv in state_read:
+        ctx.vars_state_load.append(StorageLoad(sv, [lv]))
+      # add new reference to loaded var 
+      for lvr in local_read:
+        if lv == lvr:
+          continue 
+        for vsl in ctx.vars_state_load[:]:
+          if lvr in vsl.derived_vars:
+            vsl.addDerived(lv)
+    # check if mem vars get stored back
+    for sv in state_stored:
+      for vsl in ctx.vars_state_load[:]:
+        if vsl.storage_var == sv: 
+          ctx.vars_state_load.remove(vsl)
+    # remove derived used (read)
+    for lv in local_read:
+      ctx = remove_if_loaded(ctx, lv)
 
-  # check function calls parameters
+  # check function calls parameters, or highlevelcall destination
   for ir in node.irs:
     if isinstance(ir, InternalCall) or isinstance(ir, HighLevelCall):
+      if isinstance(ir, HighLevelCall):
+        if isinstance(ir.destination, LocalVariable):
+          # remove loaded
+          ctx = remove_if_loaded(ctx, ir.destination)
+        else: # destination is derived, use local_read to get it and purge
+          local_read = node.local_variables_read
+          for lv in local_read:
+            ctx = remove_if_loaded(ctx, lv)
       # get params, remove from vars_state_load
       call_args = ir.arguments
       for arg in call_args:
-        for vsl in ctx.vars_state_load[:]:
-          if vsl.memory_var == arg:
-            ctx.vars_state_load.remove(vsl)
+        ctx = remove_if_loaded(ctx, arg)
+
+  # check if a derived var is used in an if or require statement or sstore
+  if node.type in [NodeType.IF, NodeType.IFLOOP, NodeType.RETURN] or is_solidity_call(node):
+    local_read = node.local_variables_read
+    # remove derived if any
+    for lvr in local_read:
+      ctx = remove_if_loaded(ctx, lvr)
 
   if not len(node.sons):
+    # clean results from header returns
+    for hr in ctx.header_returns:
+      ctx = remove_if_loaded(ctx, hr)
     return ctx.vars_state_load
 
-  ret = []
+  # keep the vars not solved in any of the sons
+  intersection = None
   for son in node.sons:
-      ret += check_function(son, ctx)
-  return ret
+    son_vars = check_function(son, ctx)
+    if not intersection:
+      intersection = son_vars
+    else:
+      # remove the ones not present in sons
+      for vsl in intersection[:]:
+        if not has_same_storage_in_list(vsl, son_vars):
+          intersection.remove(vsl)
+  ctx.vars_state_load = intersection # vars not solved in any son
+  return ctx.vars_state_load
+
+def has_same_storage_in_list(vsl, list) -> bool:
+  found = False
+  for v in list:
+    if v.storage_var == vsl.storage_var:
+      found = True
+      break
+  return found
+
+def remove_if_loaded(ctx: Context, memory_var):
+  for vsl in ctx.vars_state_load[:]:
+    if memory_var in vsl.derived_vars:
+      ctx.vars_state_load.remove(vsl)
+  return ctx
+
+# checks if a node is a require statement
+def is_solidity_call(node: Node) -> bool:
+  for ir in node.irs:
+    if isinstance(ir, SolidityCall):
+      return True
+  return False
 
 
 def get_inherited_contracts(contract: Contract) -> List[str]:
@@ -140,8 +188,8 @@ class LoadNotStore(AbstractDetector):
 
       for sl in results_raw:
         info = [
-          f"Found unused memory var '",
-          sl.memory_var,
+          f"Found unused memory vars '",
+          *sl.derived_vars,
           "' loaded from storage var '",
           sl.storage_var,
           "'\n"

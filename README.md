@@ -91,10 +91,11 @@ Currently, the analysis module is run on demand, but in the future, when there a
 Since custom detectors development is incremental to filter out false positives while conducting manual inspection on hits, this module allows for the argument flag "--refilter DETECTOR_NAME", to only re-analyze hits previously detected by the provided custom detector.
 
 ### Analysis Results UI
-Still using raw queries while collecting requirements before building
+WIP on another repo
 
 ## Custom Detectors 
-Custom detectors developed to run on GoodBoi. Ideally tens of them should be constantly running as their hit rate is low by design. The list will be updated as new detectors get developed, and ideas are more than welcome.
+The use case is not auditing but broad on-chain search, so the detectors are optimized for precision rather than recall.
+Ideally tens of them should be constantly running as their hit rate is low by design. The list will be updated as new detectors get developed, and ideas are more than welcome.
 
 Source codes can be found in the folder /custom_detectors
 
@@ -110,7 +111,7 @@ This tweet explains the bug better than i could do here: https://twitter.com/aks
 
 ### load-not-store
 A state variable (a struct in the use case I'm thinking about) gets loaded to memory, manipulated, and not stored back nor used as a function argument. This indicates that the developers may have forgotten to save it back to storage.
-- Just developed, still to analyze the hits and most likely implement some filter
+- Finally decent code quality but results are disappointing
 
 ## Main Notes
 ### Analysis Flags - How to choose which contracts to analyze

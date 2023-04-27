@@ -55,7 +55,6 @@ async function launchAnalysis(){
     activeWorkers++
     await Utils.sleep(100)
   }
-  console.log("done")
 }
 
 async function mysqlKeepAlive(){

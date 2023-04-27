@@ -21,10 +21,10 @@ class StorageLoad():
 class Context():
     def __init__(self, header_returns, visited: List[Node], vars_state_load: List[StorageLoad],
         local_clusters: List[List[LocalVariable]]):
-      self.header_returns = header_returns
+      self.header_returns = header_returns # e.g. function f() returns (address a)
       self.visited = visited
       self.vars_state_load = vars_state_load
-      self.local_clusters = local_clusters
+      self.local_clusters = local_clusters # clusters of local vars assigned together
 
     def __str__(self): # debug
         return 'visited' + str(self.visited)
@@ -90,7 +90,7 @@ def check_function(node: Optional[Node], ctx: Context)-> List[StorageLoad]:
       for sv in state_stored:
         for vsl in ctx.vars_state_load[:]:
           if vsl.storage_var == sv: 
-            ctx.vars_state_load.remove(vsl) # TODO remove from local_clusters if many false positive
+            ctx.vars_state_load.remove(vsl) 
       # also remove local variables read
       for lv in local_read:
         ctx = remove_if_loaded(ctx, lv)
@@ -161,12 +161,10 @@ def check_function(node: Optional[Node], ctx: Context)-> List[StorageLoad]:
   return ctx.vars_state_load
 
 def has_same_storage_in_list(vsl, list) -> bool:
-  found = False
   for v in list:
     if v.storage_var == vsl.storage_var:
-      found = True
-      break
-  return found
+      return True
+  return False
 
 def remove_if_loaded(ctx: Context, memory_var):
   # get other vars to remove by looking into local_clusters
@@ -182,7 +180,7 @@ def remove_if_loaded(ctx: Context, memory_var):
       ctx.vars_state_load.remove(vsl)
   return ctx
 
-# checks if a node is a require statement
+# checks if a node is a solidity call e.g. require
 def is_solidity_call(node: Node) -> bool:
   for ir in node.irs:
     if isinstance(ir, SolidityCall):

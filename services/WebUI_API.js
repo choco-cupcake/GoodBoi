@@ -7,6 +7,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/api/detectors/:revState', async (req, res) => {
+  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
   if(!token){
@@ -21,11 +22,11 @@ app.get('/api/detectors/:revState', async (req, res) => {
   }
 
   let ad = await mysql.getAvailableDetectors(conn, user, req.params.revState)
-  res.header("Access-Control-Allow-Origin", "*");
   res.send(ad)
 })
 
 app.get('/api/contracts', async (req, res) => {
+  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
   let user = await mysql.getTokenUser(conn, token)
@@ -35,11 +36,11 @@ app.get('/api/contracts', async (req, res) => {
   }
 
   let cpc = await mysql.getContractsPerChain(conn)
-  res.header("Access-Control-Allow-Origin", "*");
   res.send(cpc)
 })
 
 app.get('/api/contracts24h', async (req, res) => {
+  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
   let user = await mysql.getTokenUser(conn, token)
@@ -49,11 +50,11 @@ app.get('/api/contracts24h', async (req, res) => {
   }
 
   let l24 = await mysql.getContractsLast24h(conn)
-  res.header("Access-Control-Allow-Origin", "*");
   res.send(l24)
 })
 
 app.get('/api/compilationErrors', async (req, res) => {
+  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
   let user = await mysql.getTokenUser(conn, token)
@@ -63,11 +64,11 @@ app.get('/api/compilationErrors', async (req, res) => {
   }
 
   let ce = await mysql.getCompilationErrors(conn)
-  res.header("Access-Control-Allow-Origin", "*");
   res.send(ce)
 })
 
 app.get('/api/hits/:detector/:revState/:offset', async (req, res) => {
+  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
   let user = await mysql.getTokenUser(conn, token)
@@ -77,11 +78,11 @@ app.get('/api/hits/:detector/:revState/:offset', async (req, res) => {
   }
 
   let hits = await mysql.getDetectorHits(conn, user, req.params.detector, req.params.revState, req.params.offset)
-  res.header("Access-Control-Allow-Origin", "*");
   res.send(hits)
 })
 
 app.post('/api/login', async (req, res) => {
+  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   if(!req.body.username || !req.body.password)
     return
@@ -90,7 +91,6 @@ app.post('/api/login', async (req, res) => {
     res.send({error: "invalid_session"})
     return
   }
-  res.header("Access-Control-Allow-Origin", "*");
   res.send(resp)
 })
 

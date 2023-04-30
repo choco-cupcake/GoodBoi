@@ -1,13 +1,14 @@
 const express = require('express')
+var cors = require('cors');
 const mysql = require('../utils/WebUIMysqlGateway')
 const app = express()
 const port = 3000
 
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/api/detectors/:revState', async (req, res) => {
-  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
   if(!token){
@@ -26,7 +27,6 @@ app.get('/api/detectors/:revState', async (req, res) => {
 })
 
 app.get('/api/contracts', async (req, res) => {
-  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
   let user = await mysql.getTokenUser(conn, token)
@@ -40,7 +40,6 @@ app.get('/api/contracts', async (req, res) => {
 })
 
 app.get('/api/contracts24h', async (req, res) => {
-  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
   let user = await mysql.getTokenUser(conn, token)
@@ -54,7 +53,6 @@ app.get('/api/contracts24h', async (req, res) => {
 })
 
 app.get('/api/compilationErrors', async (req, res) => {
-  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
   let user = await mysql.getTokenUser(conn, token)
@@ -68,7 +66,6 @@ app.get('/api/compilationErrors', async (req, res) => {
 })
 
 app.get('/api/hits/:detector/:revState/:offset', async (req, res) => {
-  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
   let user = await mysql.getTokenUser(conn, token)
@@ -82,7 +79,6 @@ app.get('/api/hits/:detector/:revState/:offset', async (req, res) => {
 })
 
 app.post('/api/login', async (req, res) => {
-  res.header("Access-Control-Allow-Origin", "*");
   let conn = await mysql.getDBConnection()
   if(!req.body.username || !req.body.password)
     return

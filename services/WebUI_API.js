@@ -21,6 +21,7 @@ app.get('/api/detectors/:revState', async (req, res) => {
   }
 
   let ad = await mysql.getAvailableDetectors(conn, user, req.params.revState)
+  res.header("Access-Control-Allow-Origin", "*");
   res.send(ad)
 })
 
@@ -34,6 +35,7 @@ app.get('/api/contracts', async (req, res) => {
   }
 
   let cpc = await mysql.getContractsPerChain(conn)
+  res.header("Access-Control-Allow-Origin", "*");
   res.send(cpc)
 })
 
@@ -47,6 +49,7 @@ app.get('/api/contracts24h', async (req, res) => {
   }
 
   let l24 = await mysql.getContractsLast24h(conn)
+  res.header("Access-Control-Allow-Origin", "*");
   res.send(l24)
 })
 
@@ -60,6 +63,7 @@ app.get('/api/compilationErrors', async (req, res) => {
   }
 
   let ce = await mysql.getCompilationErrors(conn)
+  res.header("Access-Control-Allow-Origin", "*");
   res.send(ce)
 })
 
@@ -73,6 +77,7 @@ app.get('/api/hits/:detector/:revState/:offset', async (req, res) => {
   }
 
   let hits = await mysql.getDetectorHits(conn, user, req.params.detector, req.params.revState, req.params.offset)
+  res.header("Access-Control-Allow-Origin", "*");
   res.send(hits)
 })
 
@@ -80,15 +85,18 @@ app.post('/api/login', async (req, res) => {
   let conn = await mysql.getDBConnection()
   if(!req.body.username || !req.body.password)
     return
-  let r = await mysql.login(conn, req.body.username, req.body.password)
-  if(r.error){
+  let resp = await mysql.login(conn, req.body.username, req.body.password)
+  if(resp.error){
     res.send({error: "invalid_session"})
     return
   }
-  res.send(r.token)
+  res.header("Access-Control-Allow-Origin", "*");
+  res.send(resp)
 })
 
 
 app.listen(port, () => {
   console.log(`WebUI_API app listening on port ${port}`)
 })
+
+

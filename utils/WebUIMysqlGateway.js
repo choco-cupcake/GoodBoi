@@ -107,13 +107,37 @@ async function getDetectorHits(conn, user, detector, revState, offset){
   if(!availDetectors.includes(detector))
     return {error: "Unauthorized"}
 
-  let query = "SELECT sa.ID, c.address, c.chain, sa.`rep_" + detector + "`, c.poolFlag AS PF, c.balanceFlag AS BF, c.reflPoolFlag AS RPF, c.reflBalanceFlag AS RBF, c.lastTX, analysisDate AS anDate, c.compilerVersion FROM slither_analysis AS sa LEFT JOIN contract AS c ON c.`sourcefile_signature` = sa.`sourcefile_signature` WHERE sa.`" + detector + "` = 1 AND sa.`manualRev_" + detector + "` = 0 ORDER BY analysisDate DESC LIMIT 500 OFFSET " + offset
+  let query = "SELECT sa.ID, c.address, c.chain, sa.`rep_" + detector + "` AS report, c.poolFlag AS PF, c.balanceFlag AS BF, c.reflPoolFlag AS RPF, c.reflBalanceFlag AS RBF, c.lastTX, analysisDate AS anDate, c.compilerVersion FROM slither_analysis AS sa LEFT JOIN contract AS c ON c.`sourcefile_signature` = sa.`sourcefile_signature` WHERE sa.`" + detector + "` = 1 AND sa.`manualRev_" + detector + "` = ? ORDER BY analysisDate DESC LIMIT 500 OFFSET " + offset
   try{
     let [data, fields] = await conn.query(query, revState)
     return data
   }
   catch(e){
     console.log("ERROR -Can't get det hits", e.message)
+    return {error: "Query error"}
+  }
+}
+
+async function updateRevState(conn, user, id, detector, revState){
+  let availDetectors = await _getAvailableDetectors(conn, user)
+  if(!availDetectors.includes(detector))
+    return {error: "Unauthorized"}
+  if(isNaN(revState) || revState < 0 || revState > 4)
+    return {error: "Bad revState"}
+  if(isNaN(id))
+    return {error: "Bad id"}
+
+  let field = "manualRev_" + detector
+  let query = "UPDATE slither_analysis SET `" + field + "` = ? WHERE ID = ?"
+  try{
+    let [data, fields] = await conn.query(query, [revState, id])
+    if(!data.affectedRows){
+      return {error: "No row affected"}
+    }
+    return {status: "200"}
+  }
+  catch(e){
+    console.log("ERROR -Can't update revState ", e.message)
     return {error: "Query error"}
   }
 }
@@ -152,4 +176,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {getDBConnection, login, getTokenUser, getDetectorHits, getCompilationErrors, getContractsLast24h, getContractsPerChain, getAvailableDetectors}
+module.exports = {getDBConnection, login, getTokenUser, getDetectorHits, getCompilationErrors, getContractsLast24h, getContractsPerChain, getAvailableDetectors, updateRevState}

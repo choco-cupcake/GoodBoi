@@ -90,6 +90,19 @@ app.post('/api/login', async (req, res) => {
   res.send(resp)
 })
 
+app.put('/api/manualRevision/:id/:detector/:revState', async (req, res) => {
+  let conn = await mysql.getDBConnection()
+  let token = req.headers.authtoken
+  let user = await mysql.getTokenUser(conn, token)
+  if(!user){
+    res.send({error: "invalid_session"})
+    return
+  }
+
+  let resp = await mysql.updateRevState(conn, user, req.params.id, req.params.detector, req.params.revState)
+  res.send(resp)
+})
+
 
 app.listen(port, () => {
   console.log(`WebUI_API app listening on port ${port}`)

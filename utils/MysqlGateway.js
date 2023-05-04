@@ -3,6 +3,28 @@ const Utils = require('./Utils')
 const Crypto = require('crypto')
 const Web3 = require("web3")
 
+async function getLastSolcCommit(conn, platform){ // platforms: ["Win", "Linux"]
+  let field = "lastSolcCommit" + platform
+  let query = "SELECT " + field + " FROM status WHERE ID=1"
+  try{
+    let [data, fields] = await conn.query(query)
+    return data[0][field]
+  }
+  catch(e){
+    console.log("ERROR - getLastSolcCommit ", e.message)
+    return null
+  }
+}
+async function updateLastSolcCommit(conn, lastCommitHash, platform){ 
+  let field = "lastSolcCommit" + platform
+  let query = "UPDATE status SET " + field + " = ? WHERE ID=1"
+  try{
+    await conn.query(query, lastCommitHash)
+  }
+  catch(e){
+    console.log("ERROR - updateLastSolcCommit ", e.message)
+  }
+}
 async function updateFlagReflectionDate(conn, cID){
   let query = "UPDATE contract SET reflUpdatedAt=NOW() WHERE ID = ?"
   try{
@@ -1095,4 +1117,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

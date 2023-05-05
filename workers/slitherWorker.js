@@ -21,7 +21,7 @@ async function runAnalysis(){
 function executeSlither(workingPath, analysisPath, detectors){
   let slitherParams = ['-m', 'slither.__main__', analysisPath, '--checklist', '--detect', detectors.join(","), '--json', '-', '--solc', workerData.solcpath]
   // run slither
-  const slitherProg = spawnSync('python3', slitherParams, {cwd: workingPath}); 
+  const slitherProg = spawnSync('python3', slitherParams, {cwd: workingPath, timeout: 120000}); 
   let out = slitherProg.stdout.toString()
   if(!out.length)
     return null

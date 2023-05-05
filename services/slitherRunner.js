@@ -1,3 +1,4 @@
+const os = require("os")
 const fs = require('fs')
 const path = require('path')
 const { Worker } = require('worker_threads');
@@ -28,33 +29,54 @@ if(cliOptions.retryErrors){
 if(cliOptions.refilter)
   console.log("Refiltering detector: " + cliOptions.refilter)
 
+const isWindows = os.platform() === 'win32'
 const slitherInstances = process.env.SLITHER_INSTANCES
 const poolSize = slitherInstances * 100
+const INSTANCE_TIMEOUT = 120000
 let mysqlConn
 let contractPool = []
 let analyzedCounter = 0
 let failedCounter = 0
 let detectorsOfInterest
-let endOfResults = false
-let activeWorkers = 0
 let startTime
 let isFilling = false
+let instancesMonitor = new Array(slitherInstances)
+let status = {dbEmpty: false, activeWorkers: 0}
+let monitorTimer
 
 launchAnalysis()
 
 async function launchAnalysis(){ 
   mysqlConn = await mysql.getDBConnection()
   detectorsOfInterest = await getActiveDetectors()
+  await analyzeAll()  
+}
 
+async function analyzeAll(){
   await fillPool()
+  if(evalEndLoop())
+    return
   createAnalysisFolder()
   startTime = Date.now()
   setInterval(mysqlKeepAlive, 5000)
   for(let i=0; i < slitherInstances; i++){
-    await launchWorker()
-    activeWorkers++
+    await launchWorker(i)
+    status.activeWorkers++
     await Utils.sleep(100)
   }
+  monitorTimer = setInterval(() => {monitorStuckInstances()}, 1000)
+}
+
+function evalEndLoop(){
+  if(status.dbEmpty && !status.activeWorkers){
+    console.log("Database empty, restart in 10 mins")
+    if(monitorTimer)
+      clearInterval(monitorTimer)
+    status.dbEmpty = false
+    setTimeout(() => {analyzeAll()}, 10 * 60 * 1000) // 10 mins
+    return true
+  }
+  return false
 }
 
 async function mysqlKeepAlive(){
@@ -87,38 +109,41 @@ async function getActiveDetectors(){
   return allDetectors
 }
 
-async function launchWorker(){
-  analyzedCounter++
+async function launchWorker(index){
   let contract = await contractPool.pop()
-  if(!contract)
+  if(!contract){
+    console.log("Worker #" + index + " done")
+    status.activeWorkers--
     return
+  }
   let solcPath = getSolcPath(contract.files[0].compilerVersion)
   let folderpath = preparePath(contract.files)
-  _launchWorker(contract, folderpath, solcPath)
+  _launchWorker(contract, folderpath, solcPath, index)
 }
 
-function logStatus(id, elapsedSlither, hitsString){
+function logStatus(id, elapsedSlither, hitsString, index){
   let elapsedTotal = Date.now() - startTime
   let speed_apm = Math.floor(analyzedCounter / (elapsedTotal / 1000 / 60)) // apm = analysis per minute
   let avgtime = Math.floor(elapsedTotal / analyzedCounter)
   let in24h = Math.floor(24 * 60 * 60 * 1000 / avgtime)
   let errorRate = Math.floor(failedCounter * 10000 / analyzedCounter) / 100
-  console.log(Utils.getTime() + " - #" + id + " done - took " + elapsedSlither + "ms  -  speed: " + speed_apm + "apm  -  in 24h: " + in24h + "  -  error rate: " + errorRate + "%" + hitsString)
-
+  console.log(Utils.getTime() + " - Instance:" + index + "    #" + id + " done - took " + elapsedSlither + "ms  -  speed: " + speed_apm + "apm  -  in 24h: " + in24h + "  -  error rate: " + errorRate + "%" + hitsString)
 }
 
 function getSolcPath(compVer){
+  let solcFolder = isWindows ? "windows-amd64" : "linux-amd64"
   let solcVer = compVer.split("+")[0].substring(1)
-  let solcFiles = fs.readdirSync("./solc-bin/windows-amd64")
+  let solcFiles = fs.readdirSync("./solc-bin/" + solcFolder)
   for(let f of solcFiles){
-    let fVer = f.split("+")[0].substring("solc-windows-amd64-v".length)
+    let fVer = f.split("+")[0].substring(("solc-" + solcFolder + "-v").length)
     if(fVer == solcVer)
-      return path.resolve("./solc-bin/windows-amd64/" + f)
+      return path.resolve("./solc-bin/" + solcFolder + "/" + f)
   }
   return null
 }
 
 async function workerCleanup(toClean){
+  analyzedCounter++
   if(toClean?.elapsed){
     let hitsDetectors = [], hitsString = ""
     if(toClean?.output?.success && toClean?.output?.findings){
@@ -131,7 +156,7 @@ async function workerCleanup(toClean){
     if(hitsDetectors.length){
       hitsString = " - Hits: " + hitsDetectors.join(", ")
     }
-    logStatus(toClean.contractID, toClean.elapsed, hitsString)
+    logStatus(toClean.contractID, toClean.elapsed, hitsString, toClean.index)
   }
   if(toClean?.output?.success){
     await mysql.insertFindingsToDB(mysqlConn, toClean.sourcefile_signature, toClean.output)
@@ -142,17 +167,19 @@ async function workerCleanup(toClean){
     console.log("Analysis of contract ID=" + toClean.contractID + " resulted in an ERROR:", _error)
     await mysql.markContractAsErrorAnalysis(mysqlConn, toClean.sourcefile_signature, false, _error)
   }
+
   await Utils.deleteFolder(toClean.folderpath.workingPath)
+
   if(!contractPool.length){
-    if(endOfResults){
-      if(activeWorkers == 1)
-        console.log("Analysis done")
-      activeWorkers--
+    await fillPool()
+    if(status.dbEmpty){
+      console.log("Worker #" + toClean.index + " done")
+      status.activeWorkers--
+      evalEndLoop()
       return
     }
-    await fillPool()
   }
-  launchWorker()
+  launchWorker(toClean.index)
 }
 
 function parseAnalysisError(err){
@@ -170,8 +197,8 @@ function parseAnalysisError(err){
   
 }
 
-function _launchWorker(contract, folderpath, solcpath){
-  let _toClean = {folderpath: folderpath, contractID: contract.ID, sourcefile_signature: contract.sourcefile_signature}
+function _launchWorker(contract, folderpath, solcpath, index){
+  let _toClean = {folderpath: folderpath, contractID: contract.ID, sourcefile_signature: contract.sourcefile_signature, index: index}
   let w = new Worker('./workers/slitherWorker.js', { 
     workerData: { 
       workingPath: folderpath.workingPath, 
@@ -180,6 +207,7 @@ function _launchWorker(contract, folderpath, solcpath){
       solcpath: solcpath
     }
   })
+  instancesMonitor[index] = {worker: w, start: Date.now()}
   w.on('error', (err) => { 
     console.log(err.message); 
   });
@@ -189,9 +217,19 @@ function _launchWorker(contract, folderpath, solcpath){
   w.on('message', (msg) => {
     _toClean['output'] = msg.output
     _toClean['elapsed'] = msg.elapsed
+    
   });
 }
 
+async function monitorStuckInstances(){
+  for(let i=0; i< instancesMonitor.length; i++){
+    if(Date.now() - instancesMonitor[i].start > INSTANCE_TIMEOUT){
+      console.log("Terminating stuck worker #" + i)
+      await instancesMonitor[i].worker.terminate()
+      instancesMonitor[i].start = Date.now() // give it time, things can get really stuck
+    }
+  }
+}
 
 async function fillPool(){
   if(isFilling){
@@ -208,11 +246,12 @@ async function fillPool(){
   isFilling= true
   console.log("Filling pool triggered")
   let newPool = await mysql.getBatchToAnalyze(mysqlConn, poolSize, chain, detectorsOfInterest, cliOptions.refilter, cliOptions.retryErrors)
-  console.log("Filling pool done")
-  endOfResults = newPool.eor
-  contractPool.length = 0
-  for(let c of newPool.data)
-    contractPool.push(c)  
+  console.log("Pool filled with " + newPool.data.length + " contracts")
+  contractPool = newPool.data 
+  if(!contractPool.length){
+    status.dbEmpty = true 
+    evalEndLoop()
+  }
   isFilling = false
 }
 
@@ -300,5 +339,3 @@ function fixPragma(source, compilerVer){
   }
   return processed
 }
-
-module.exports = {launchAnalysis}

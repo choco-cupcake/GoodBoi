@@ -611,6 +611,9 @@ async function getContractFiles(conn, contractID, address, chain){
       process.exit()
     }
   }
+async function spotAnalysis(conn, method, input){
+
+}
 
 async function getBatchToAnalyze(conn, len, chain, detectors, refilterDetector, retryErrors){
 // analysis table analyzes sourcefile, not contract. results viewer will get related contracts
@@ -642,11 +645,7 @@ async function getBatchToAnalyze(conn, len, chain, detectors, refilterDetector, 
   try{
     let [data, fields] = await conn.query(query, queryParams)
     if(!data.length){
-      console.log("WARNING - Can't get contracts to analyze - length = 0")
-      return {eor: true, data: []}
-    }
-    if(data.length < len){
-      endOfResults = true
+      return {data: []}
     }
     else{
       let lastContract = data.at(-1).contract
@@ -670,7 +669,7 @@ async function getBatchToAnalyze(conn, len, chain, detectors, refilterDetector, 
       returnData.push({ID: c.ID, files: files, detectors: detectorsToUse, sourcefile_signature: c.sourcefile_signature})
 
     }
-    return {eor: endOfResults, data: returnData}
+    return {data: returnData}
   }
   catch(e){
     console.log("ERROR - Can't get contracts to analyze", e.message)

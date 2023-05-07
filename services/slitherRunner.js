@@ -53,8 +53,8 @@ async function launchAnalysis(){
 }
 
 async function analyzeAll(){
-  await fillPool()
-  if(evalEndLoop())
+  let noResults = await fillPool()
+  if(noResults)
     return
   createAnalysisFolder()
   startTime = Date.now()
@@ -69,11 +69,11 @@ async function analyzeAll(){
 
 function evalEndLoop(){
   if(status.dbEmpty && !status.activeWorkers){
-    console.log("Database empty, restart in 10 mins")
+    console.log("Database empty, restart in 2 mins")
     if(monitorTimer)
       clearInterval(monitorTimer)
     status.dbEmpty = false
-    setTimeout(() => {analyzeAll()}, 10 * 60 * 1000) // 10 mins
+    setTimeout(() => {analyzeAll()}, 2 * 60 * 1000) // 2 mins
     return true
   }
   return false
@@ -171,11 +171,11 @@ async function workerCleanup(toClean){
   await Utils.deleteFolder(toClean.folderpath.workingPath)
 
   if(!contractPool.length){
-    await fillPool()
+    let noRes = await fillPool()
     if(status.dbEmpty){
       console.log("Worker #" + toClean.index + " done")
       status.activeWorkers--
-      evalEndLoop()
+      evalEndLoop() // need to check this
       return
     }
   }
@@ -232,6 +232,7 @@ async function monitorStuckInstances(){
 }
 
 async function fillPool(){
+  let noResults = false
   if(isFilling){
     console.log("Detected filling ongoing, waiting")
     return new Promise((resolve, reject) =>{
@@ -250,9 +251,10 @@ async function fillPool(){
   contractPool = newPool.data 
   if(!contractPool.length){
     status.dbEmpty = true 
-    evalEndLoop()
+    noResults = evalEndLoop()
   }
   isFilling = false
+  return noResults
 }
 
 function preparePath(files){

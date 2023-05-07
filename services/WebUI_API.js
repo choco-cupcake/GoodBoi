@@ -84,7 +84,7 @@ app.post('/api/login', async (req, res) => {
     return
   let resp = await mysql.login(conn, req.body.username, req.body.password)
   if(resp.error){
-    res.send({error: "invalid_session"})
+    res.send({error: "invalid_credentials"})
     return
   }
   res.send(resp)

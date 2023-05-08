@@ -10,3 +10,4 @@ custom_detectors/drafts
 mysqlBackup/
 utils/chrome-win/
 scripts/contractsGetter/download/
+spotAnalysis/

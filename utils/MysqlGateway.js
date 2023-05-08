@@ -611,8 +611,22 @@ async function getContractFiles(conn, contractID, address, chain){
       process.exit()
     }
   }
+  
 async function spotAnalysis(conn, method, input){
-
+  let sq = method == "regex" ? "REGEXP_LIKE(sf.sourceText,'"+input+"')" : "sf.sourceText LIKE '"+input+"'"
+  let query = ''.concat(
+    "SELECT DISTINCT c.ID, c.sourcefile_signature, c.compilerVersion, csf.contract, csf.filename FROM contract AS c ",
+    "INNER JOIN contract_sourcefile AS csf ON csf.contract = c.ID ",
+    "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
+    "WHERE " + sq)
+  try{
+    let [data, fields] = await conn.query(query);
+    return data
+  }
+  catch(e){
+    Utils.printQueryError(query, [], e.message)
+    return []
+  }
 }
 
 async function getBatchToAnalyze(conn, len, chain, detectors, refilterDetector, retryErrors){
@@ -1116,4 +1130,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {spotAnalysis, updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

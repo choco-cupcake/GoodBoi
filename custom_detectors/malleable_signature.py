@@ -10,6 +10,7 @@ class Context():
     def __init__(self):
         self.visited = []
         self.s_checked = False
+        self.handles_nonce = False
 
     def __str__(self): # debug
         return 'param' + str(self.param)
@@ -54,12 +55,16 @@ def check_function(node: Optional[Node], ctx: Context):
     return False
   ctx.visited.append(node)
 
+  # nonces
+  if handles_nonce(node):
+    ctx.handles_nonce = True
+
   # s check
   if "0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0" in str(node): # lazy, ugly, effective
     ctx.s_checked = True
   
   # ecrecover
-  if is_ecrecover(node) and not ctx.s_checked:
+  if is_ecrecover(node) and not ctx.s_checked and not ctx.handles_nonce:
     return True
 
   # internal calls
@@ -73,6 +78,12 @@ def check_function(node: Optional[Node], ctx: Context):
   for son in node.sons:
       ret = ret or check_function(son, copy.copy(ctx))
   return ret
+
+def handles_nonce(node: Node) -> bool:
+  for var in node.variables_read + node.variables_written:
+    if hasattr(var, "name") and "nonce" in var.name:
+      return True
+  return False
 
 def is_ecrecover(node: Node) -> bool:
   for ir in node.irs:

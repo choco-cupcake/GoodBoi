@@ -8,6 +8,8 @@ Scraper of EVM compatible Smart Contracts' verified sources and runner of Slithe
 ### Use Cases
 - GoodBoi can be used to identify vulnerable patterns in smart contracts, drawing inspiration from audited contracts and hacks happened in the wild — low precision and manual filtering. 
 
+- During an audit in can be useful to find similar implementations of specific functionalities under exam
+
 - GoodBoi can also be used to search for specific sets of contracts based on research requirements. While Slither is currently the primary focus due to its high expressivity and fast performance, other analysis tools may be implemented in the future.
 
 ### Usage
@@ -91,27 +93,23 @@ Currently, the analysis module is run on demand, but in the future, when there a
 Since custom detectors development is incremental to filter out false positives while conducting manual inspection on hits, this module allows for the argument flag "--refilter DETECTOR_NAME", to only re-analyze hits previously detected by the provided custom detector.
 
 ### Analysis Results UI
-WIP on another repo
+Not yet pretty but good UX, allows to assign to each finding a score from 1:FP to 4:Exploitable 
 
-## Custom Detectors 
-The use case is not auditing but broad on-chain search, so the detectors are optimized for precision rather than recall.
-Ideally tens of them should be constantly running as their hit rate is low by design. The list will be updated as new detectors get developed, and ideas are more than welcome.
+Repo: https://github.com/giovannifranchi/goodboi-frontend
 
-Source codes can be found in the folder /custom_detectors
+## Slither Detectors Development
+The development process follows an incremental approach, wherein subsequent phases are iteratively executed after the main development phase. 
+- Detector development
+- Run detector 
+- Inspect hits using the frontend
+- Refine detector code to account for newly discovered false positive patterns 
+	- When some false positives are recurring (forked code) and hard to filter, one can rely on function and contract names to apply filters
+- Refilter previous hits by running 'node services/slitherRunner --refilter "detector-name"'
+- If the previous run resulted in errors, retry the failed analysis by runing 'node services/slitherRunner --retryErrors' (this flow to be improved as it currently retry any error regardless of the type)
 
-### unprotected-write
-Looks for functions that write to storage, where developers forgot to implement the access control. 
-- This vulnerable pattern is quite trivial but has been exploited multiple times in the wild
-- Access control can be implemented in a ton of ways (even just triggering a negative overflow), trying to filter all of them has been quite a pain, and probably came at the cost of filtering some true positive
+When writing custom detectors for Slither, it is important to account for every edge case. A failure of a single detector will cause the analysis to fail for other detectors as well.
 
-### requires-in-loop
-This tweet explains the bug better than i could do here: https://twitter.com/akshaysrivastv/status/1648310441058115592
-- This pattern is very specific, arguably too specific. Also idk if ever exploited in the wild
-- Originally I was hoping it could generalize, but without ecrecover in the loop its just false positives 	
-
-### load-not-store
-A state variable (a struct in the use case I'm thinking about) gets loaded to memory, manipulated, and not stored back nor used as a function argument. This indicates that the developers may have forgotten to save it back to storage.
-- Finally decent code quality but results are disappointing
+Source codes of currently running custom detectors can be found in the folder /custom_detectors. They'll eventually end up in another repo.
 
 ## Main Notes
 ### Analysis Flags - How to choose which contracts to analyze
@@ -155,11 +153,6 @@ GoodBoi uses the free tier of etherscan/bscscan/polygonscan/arbiscan to gather s
 Slither compiles the contracts before their analysis, and compilation time can easily be longer than the analysis time. Saving the compiled AST on the database and feeding it to Slither instead of the source code, would speed up subsequent analysis a lot.
 
 Unluckily Slither deprecated the AST input feature years ago.
-
-### Slither custom detector
-The development process follows an incremental approach, wherein subsequent phases are iteratively executed after the main development phase. These subsequent phases involve performing database runs, analyzing the results, and subsequently implementing filters to mitigate false positives.
-
-When writing custom detectors for Slither, it is important to account for every edge case. A failure of a single detector will cause the analysis to fail for other detectors as well.
 
 ## Side Considerations
 

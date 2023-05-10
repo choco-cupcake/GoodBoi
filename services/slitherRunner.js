@@ -53,7 +53,7 @@ async function launchAnalysis(){
 }
 
 async function analyzeAll(){
-  let noResults = await fillPool()
+  let noResults = await fillPool(true)
   if(noResults)
     return
   createAnalysisFolder()
@@ -69,6 +69,10 @@ async function analyzeAll(){
 
 function evalEndLoop(){
   if(status.dbEmpty && !status.activeWorkers){
+    if(cliOptions.refilter){
+      console.log("Refilter done")
+      process.exit()
+    }
     console.log("Database empty, restart in 2 mins")
     if(monitorTimer)
       clearInterval(monitorTimer)
@@ -231,7 +235,12 @@ async function monitorStuckInstances(){
   }
 }
 
-async function fillPool(){
+async function fillPool(first = false){
+  if(!first && cliOptions.refilter){
+    status.dbEmpty = true 
+    evalEndLoop()
+    return
+  }
   let noResults = false
   if(isFilling){
     console.log("Detected filling ongoing, waiting")

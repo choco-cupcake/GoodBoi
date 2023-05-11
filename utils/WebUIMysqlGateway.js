@@ -29,8 +29,9 @@ async function getContractsLast24h(conn){
   }
 }
 
-async function getContractsPerChain(conn){
-  let query = "SELECT `chain`, COUNT(*) AS c FROM contract GROUP BY `chain`"
+async function getContractsPerChain(conn, flagged = false){
+  let flaggedQ = flagged ? " WHERE (C.poolFlag=1 OR C.balanceFlag=1 OR C.reflPoolFlag=1 OR C.reflBalanceFlag=1) " : ""
+  let query = "SELECT `chain`, COUNT(*) AS c FROM contract AS C " + flaggedQ + " GROUP BY `chain`"
   try{
     let [data, fields] = await conn.query(query)
     if(!data.length){
@@ -87,7 +88,7 @@ async function _getAvailableDetectors(conn, user){
 }
 
 async function getDetectorHitsCount(conn, detector, revState){
-  let query = "SELECT count(*) AS c FROM slither_analysis WHERE `" + detector + "`= 1 AND `manualRev_" + detector + "` = ?"
+  let query = "SELECT count(*) AS c FROM slither_analysis AS sa CROSS JOIN contract AS c ON c.sourcefile_signature = sa.sourcefile_signature WHERE `" + detector + "`= 1 AND `manualRev_" + detector + "` = ?"
   try{
     let [data, fields] = await conn.query(query, revState)
     if(!data.length){
@@ -99,7 +100,21 @@ async function getDetectorHitsCount(conn, detector, revState){
     console.log("ERROR -Can't get det hit count", e.message)
     return {error: "Query error"}
   }
+}
 
+async function getAnalysisCount(conn, detector){
+  let query = "SELECT count(*) AS count FROM slither_analysis AS sa CROSS JOIN contract AS c ON c.sourcefile_signature = sa.sourcefile_signature WHERE `" + detector + "` != -1"
+  try{
+    let [data, fields] = await conn.query(query)
+    if(!data.length){
+      return {error: "Query error"}
+    }
+    return data[0]
+  }
+  catch(e){
+    console.log("ERROR -Can't get det hit count", e.message)
+    return {error: "Query error"}
+  }
 }
 
 async function getDetectorHits(conn, user, detector, revState, offset){
@@ -107,7 +122,7 @@ async function getDetectorHits(conn, user, detector, revState, offset){
   if(!availDetectors.includes(detector))
     return {error: "Unauthorized"}
 
-  let query = "SELECT sa.ID, c.address, c.chain, sa.`rep_" + detector + "` AS report, c.poolFlag AS PF, c.balanceFlag AS BF, c.reflPoolFlag AS RPF, c.reflBalanceFlag AS RBF, c.lastTX, analysisDate AS anDate, c.compilerVersion FROM slither_analysis AS sa LEFT JOIN contract AS c ON c.`sourcefile_signature` = sa.`sourcefile_signature` WHERE sa.`" + detector + "` = 1 AND sa.`manualRev_" + detector + "` = ? ORDER BY analysisDate DESC LIMIT 500 OFFSET " + offset
+  let query = "SELECT sa.ID, c.address, c.chain, sa.`rep_" + detector + "` AS report, c.poolFlag AS PF, c.balanceFlag AS BF, c.reflPoolFlag AS RPF, c.reflBalanceFlag AS RBF, c.lastTX, analysisDate AS anDate, c.compilerVersion FROM slither_analysis AS sa CROSS JOIN contract AS c ON c.`sourcefile_signature` = sa.`sourcefile_signature` WHERE sa.`" + detector + "` = 1 AND sa.`manualRev_" + detector + "` = ? ORDER BY analysisDate DESC LIMIT 500 OFFSET " + offset
   try{
     let [data, fields] = await conn.query(query, revState)
     return data
@@ -176,4 +191,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {getDBConnection, login, getTokenUser, getDetectorHits, getCompilationErrors, getContractsLast24h, getContractsPerChain, getAvailableDetectors, updateRevState}
+module.exports = {getDBConnection, login, getTokenUser, getDetectorHits, getCompilationErrors, getContractsLast24h, getContractsPerChain, getAvailableDetectors, updateRevState, getAnalysisCount}

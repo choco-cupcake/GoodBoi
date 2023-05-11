@@ -39,6 +39,19 @@ app.get('/api/contracts', async (req, res) => {
   res.send(cpc)
 })
 
+app.get('/api/contractsFlagged', async (req, res) => {
+  let conn = await mysql.getDBConnection()
+  let token = req.headers.authtoken
+  let user = await mysql.getTokenUser(conn, token)
+  if(!user){
+    res.send({error: "invalid_session"})
+    return
+  }
+
+  let cpc = await mysql.getContractsPerChain(conn, true)
+  res.send(cpc)
+})
+
 app.get('/api/contracts24h', async (req, res) => {
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken
@@ -76,6 +89,19 @@ app.get('/api/hits/:detector/:revState/:offset', async (req, res) => {
 
   let hits = await mysql.getDetectorHits(conn, user, req.params.detector, req.params.revState, req.params.offset)
   res.send(hits)
+})
+
+app.get('/api/analysisCount/:detector', async (req, res) => {
+  let conn = await mysql.getDBConnection()
+  let token = req.headers.authtoken
+  let user = await mysql.getTokenUser(conn, token)
+  if(!user){
+    res.send({error: "invalid_session"})
+    return
+  }
+
+  let count = await mysql.getAnalysisCount(conn, req.params.detector)
+  res.send(count)
 })
 
 app.post('/api/login', async (req, res) => {

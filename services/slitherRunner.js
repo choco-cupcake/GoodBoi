@@ -8,7 +8,7 @@ const Detectors = require('../data/slither_detectors');
 const { program } = require('commander');
 
 program.option('--refilter <string>', 'detector to refilter (only analyzes this detector\'s previous hits');
-program.option('--retryErrors', 'detector to refilter (only analyzes this detector\'s previous hits');
+program.option('--retryErrors <number>', 'retry failed analysis in the last X hours');
 program.option('--chain <string>', 'chain to operate on');
 
 program.parse();
@@ -175,7 +175,7 @@ async function workerCleanup(toClean){
   await Utils.deleteFolder(toClean.folderpath.workingPath)
 
   if(!contractPool.length){
-    let noRes = await fillPool()
+    await fillPool()
     if(status.dbEmpty){
       console.log("Worker #" + toClean.index + " done")
       status.activeWorkers--

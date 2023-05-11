@@ -644,6 +644,7 @@ async function getBatchToAnalyze(conn, len, chain, detectors, refilterDetector, 
     " INNER JOIN slither_analysis AS an ON an.sourcefile_signature = c.sourcefile_signature ",
     " WHERE ",
     retryErrors ? " an.failedAnalysis > 0 " : " an.failedAnalysis = 0 ",
+    retryErrors ? " AND DATE_SUB(NOW(), INTERVAL " + retryErrors + " HOUR) < an.analysisDate " : "", // only recheck failed analysis in the last retryErrors hours
     " AND (c.poolFlag=1 OR c.balanceFlag=1 OR c.reflPoolFlag=1 OR c.reflBalanceFlag=1)",
     chain != 'all' ? "  AND c.chain = ? " : "",
     detSub, // keeps only contracts not yet analyzed for these detectors

@@ -83,6 +83,9 @@ Note: A proxy contract will be pool analyzed according to its implementation sou
 ### Flags Reflector
 Reflects Flags, see section Notes.AnalysisFlags
 
+### Solc Downloader
+Monitors the repo https://github.com/ethereum/solc-bin to download new versions and apply updates. Meant to be run on the analysis server, to minimize maintenance. Downloads both Linux and Windows versions, as the analsisRunner module works on both.
+
 ### Slither Runner
 The Slither Runner module is designed to run Slither instances in parallel and save the results to the database. It takes a set of detectors as input and uses only the detectors that have not been used on a contract before, in order to analyze the contract. 
 
@@ -105,7 +108,7 @@ The development process follows an incremental approach, wherein subsequent phas
 - Refine detector code to account for newly discovered false positive patterns 
 	- When some false positives are recurring (forked code) and hard to filter, one can rely on function and contract names to apply filters
 - Refilter previous hits by running 'node services/slitherRunner --refilter "detector-name"'
-- If the previous run resulted in errors, retry the failed analysis by runing 'node services/slitherRunner --retryErrors' (this flow to be improved as it currently retry any error regardless of the type)
+- If the previous run resulted in errors, retry the analysis failed in the last HOURS hours by runing 'node services/slitherRunner --retryErrors HOURS'
 
 When writing custom detectors for Slither, it is important to account for every edge case. A failure of a single detector will cause the analysis to fail for other detectors as well.
 

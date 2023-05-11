@@ -80,9 +80,10 @@ async function downloadUploadedFiles(pfData, commitUrl){ //res.data[0].url
   let filesResp = await axios.get(commitUrl + "?per_page=50")
   let parentFolder = pfData.ghFolder
   let addedFiles = filesResp.data.files.filter(e => e.filename.substring(0, parentFolder.length) == parentFolder && !e.filename.includes("latest") )
-  let files = addedFiles.map(e => e.filename)
   for(let file of addedFiles){ 
-    if (['linux-amd64/list.js', 'linux-amd64/list.json', 'linux-amd64/list.txt'].includes(file.filename)) // gave up the map filter
+    let p = file.filename.split("/")
+    let fn = p.length > 1 ? p.at(-1) : file.filename
+    if (['list.js', 'list.json', 'list.txt'].includes(fn)) // gave up the map filter
       continue
     let localPath = path.join("./solc-bin", file.filename)
     if(file.status == "modified") // binary updated

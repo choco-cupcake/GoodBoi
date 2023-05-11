@@ -648,7 +648,7 @@ async function getBatchToAnalyze(conn, len, chain, detectors, refilterDetector, 
     chain != 'all' ? "  AND c.chain = ? " : "",
     detSub, // keeps only contracts not yet analyzed for these detectors
     ") ",
-    refilterDetector ? "" : (" LIMIT " + len), // get full results for refiltering, not to overlap with subsequent batches
+    refilterDetector || retryErrors ? "" : (" LIMIT " + len), // get full results for refiltering, not to overlap with subsequent batches
     ") AS t1 ON c.ID = t1.ID;"
   )
 

@@ -5,4 +5,6 @@ const detectrs_slither_badcode = ["tautology", "write-after-write", "divide-befo
 
 const custom_detectors = ["unprotected-write", "requires-in-loop", "load-not-store", "for-continue-increment", "malleable-signature"]
 
-module.exports = {custom_detectors}
+const pessimistic = ['pess-before-token-transfer', 'pess-call-forward-to-protected', 'pess-double-entry-token-alert', 'pess-dubious-typecast', 'pess-event-setter', 'pess-only-eoa-check', 'pess-inconsistent-nonreentrant', 'pess-magic-number', 'pess-multiple-storage-read', 'pess-nft-approve-warning', 'pess-readonly-reentrancy', 'pess-strange-setter', 'pess-timelock-controller', 'pess-token-fallback', 'pess-tx-gasprice', 'pess-uni-v2', 'pess-unprotected-initialize', 'pess-unprotected-setter']
+
+module.exports = custom_detectors.concat(pessimistic)

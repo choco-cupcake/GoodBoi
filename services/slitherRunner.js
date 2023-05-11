@@ -69,8 +69,8 @@ async function analyzeAll(){
 
 function evalEndLoop(){
   if(status.dbEmpty && !status.activeWorkers){
-    if(cliOptions.refilter){
-      console.log("Refilter done")
+    if(cliOptions.refilter || cliOptions.retryErrors){
+      console.log((cliOptions.refilter ? "Refilter" : "Error retry") + " done")
       process.exit()
     }
     console.log("Database empty, restart in 2 mins")
@@ -236,7 +236,7 @@ async function monitorStuckInstances(){
 }
 
 async function fillPool(first = false){
-  if(!first && cliOptions.refilter){
+  if(!first && (cliOptions.refilter || cliOptions.retryErrors)){
     status.dbEmpty = true 
     evalEndLoop()
     return

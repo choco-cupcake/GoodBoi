@@ -16,7 +16,6 @@ app.get('/api/detectors/:revState', async (req, res) => {
     return
   }
   let user = await mysql.getTokenUser(conn, token)
-  console.log(user)
   if(!user){
     res.send({error: "invalid_session"})
     return

@@ -3,6 +3,31 @@ const Utils = require('./Utils')
 const Crypto = require('crypto')
 const Web3 = require("web3")
 
+async function getSourcefileIDs(conn, ID){
+  let query = "SELECT sourcefile FROM contract_sourcefile WHERE contract=?"
+  try{
+    let [data, fields] = await conn.query(query, ID)
+    return data
+  }
+  catch(e){
+    console.log("ERROR - getSourcefleIDs ", e.message)
+    return null
+  }
+}
+
+
+async function getContractsNullSignature(conn, platform){
+  let query = "SELECT ID, sourcefile_signature, chain, address FROM contract WHERE sourcefile_signature IS NULL"
+  try{
+    let [data, fields] = await conn.query(query)
+    return data
+  }
+  catch(e){
+    console.log("ERROR - getContractsNullSignature ", e.message)
+    return null
+  }
+}
+
 async function getLastSolcCommit(conn, platform){ // platforms: ["Win", "Linux"]
   let field = "lastSolcCommit" + platform
   let query = "SELECT " + field + " FROM status WHERE ID=1"
@@ -426,9 +451,9 @@ async function checkPruneContract(conn, chain, contractAddress, totalUSDValue){
   return false
 }
 
-async function pruneContract(conn, chain, contractAddress){
+async function pruneContract(conn, chain, contractAddress, contractObj = null){
   // get contract ID
-  let contract = await getContract(conn, chain, contractAddress)
+  let contract = contractObj || await getContract(conn, chain, contractAddress)
   if(!contract) return
   // get contract_sourcefiles
   let contract_sourcefiles = await getContractSourcefilesFromContract(conn, contract.ID)
@@ -443,11 +468,11 @@ async function pruneContract(conn, chain, contractAddress){
     await deleteContractSourcefile(conn, contract_sourcefile.ID)
   }
   // delete parsedaddress
-  await deleteParsedAddress(conn, chain, contractAddress)
+  await deleteParsedAddress(conn, chain || contract.chain, contractAddress || contract.address)
   // delete analysis
   await deleteAnalysis(conn, contract.sourcefile_signature)
   // delete balance
-  await deleteBalance(conn, chain, contractAddress)
+  await deleteBalance(conn, chain || contract.chain, contractAddress || contract.address)
   // delete contract
   await deleteContract(conn, contract.ID)
 }
@@ -1131,4 +1156,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {spotAnalysis, updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {pushAddressToPoolTable, pruneContract, updateSourcefileSignature, getSourcefileIDs, getContractsNullSignature, spotAnalysis, updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

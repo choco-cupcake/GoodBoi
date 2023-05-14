@@ -38,7 +38,7 @@ app.get('/api/detectorslist', async (req, res) => {
     return
   }
 
-  let ad = await mysql.getUserDetectors(conn, user)
+  let ad = {detectors: await mysql.getUserDetectors(conn, user)}
   res.send(ad)
 })
 

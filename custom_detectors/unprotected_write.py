@@ -50,10 +50,10 @@ coveredFunctions = []
 # recursive
 banned_funcs = ["transfer", "_transfer", "transferfrom", 'safetransferfrom', "transferpermit", "transferwithpermit", 'constructor', "burn", "_burn", "initialize"]
 # recursive, partial (LIKE %x%)
-banned_funcs_partial = [] # ['init', 'setup'] removed bc added functionality to detect bool var checked and set in the same function
+banned_funcs_partial = ['init'] 
 
 # widespread false positives
-whitelisted_vars = ['allLendingPools', 'poolData', 'queue', 'slot0', 'triggerTime', 'totalSupply', '_totalSupply', 'currentTime']
+whitelisted_vars = ['allLendingPools', 'poolData', 'queue', 'slot0', 'triggerTime', 'totalSupply', '_totalSupply', 'currentTime', 'my_user_value', 'hashes', 'fundsDestination']
 whitelisted_vars_partial = ['last', 'latest', 'next']
 
 def reset_covered_functions():

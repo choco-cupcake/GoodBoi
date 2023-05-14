@@ -64,9 +64,10 @@ async function getTokenUser(conn, token){
   }
 }
 
+
 async function getAvailableDetectors(conn, user, revState){
   ret = []
-  let detectorsAvail = await _getAvailableDetectors(conn, user)
+  let detectorsAvail = await getUserDetectors(conn, user)
   let detectorsAvailArr = detectorsAvail.split(",")
   for(let det of detectorsAvailArr){
     let count = await getDetectorHitsCount(conn, det, revState)
@@ -75,7 +76,7 @@ async function getAvailableDetectors(conn, user, revState){
   return ret
 }
 
-async function _getAvailableDetectors(conn, user){
+async function getUserDetectors(conn, user){
   let query = "SELECT detectors FROM webui_user WHERE ID = ?"
   try{
     let [data, fields] = await conn.query(query, user)
@@ -118,7 +119,7 @@ async function getAnalysisCount(conn, detector){
 }
 
 async function getDetectorHits(conn, user, detector, revState, offset){
-  let availDetectors = await _getAvailableDetectors(conn, user)
+  let availDetectors = await getUserDetectors(conn, user)
   if(!availDetectors.includes(detector))
     return {error: "Unauthorized"}
 
@@ -134,7 +135,7 @@ async function getDetectorHits(conn, user, detector, revState, offset){
 }
 
 async function updateRevState(conn, user, id, detector, revState){
-  let availDetectors = await _getAvailableDetectors(conn, user)
+  let availDetectors = await getUserDetectors(conn, user)
   if(!availDetectors.includes(detector))
     return {error: "Unauthorized"}
   if(isNaN(revState) || revState < 0 || revState > 4)
@@ -191,4 +192,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {getDBConnection, login, getTokenUser, getDetectorHits, getCompilationErrors, getContractsLast24h, getContractsPerChain, getAvailableDetectors, updateRevState, getAnalysisCount}
+module.exports = {getDBConnection, login, getTokenUser, getDetectorHits, getCompilationErrors, getContractsLast24h, getContractsPerChain, getAvailableDetectors, updateRevState, getAnalysisCount, getUserDetectors, getDetectorHitsCount}

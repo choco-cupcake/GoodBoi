@@ -25,6 +25,44 @@ app.get('/api/detectors/:revState', async (req, res) => {
   res.send(ad)
 })
 
+app.get('/api/detectorslist', async (req, res) => {
+  let conn = await mysql.getDBConnection()
+  let token = req.headers.authtoken
+  if(!token){
+    res.send({error: "invalid_session"})
+    return
+  }
+  let user = await mysql.getTokenUser(conn, token)
+  if(!user){
+    res.send({error: "invalid_session"})
+    return
+  }
+
+  let ad = await mysql.getUserDetectors(conn, user)
+  res.send(ad)
+})
+
+app.get('/api/hitscount/:detector/:revState', async (req, res) => {
+  let conn = await mysql.getDBConnection()
+  let token = req.headers.authtoken
+  if(!token){
+    res.send({error: "invalid_session"})
+    return
+  }
+  let user = await mysql.getTokenUser(conn, token)
+  if(!user){
+    res.send({error: "invalid_session"})
+    return
+  }
+  let allowedDetectors = await mysql.getUserDetectors(conn, user)
+  if(!allowedDetectors.includes(req.params.detector)){
+    res.send({error: "not_allowed"})
+    return
+  }
+  let ad = {count: await mysql.getDetectorHitsCount(conn, req.params.detector, req.params.revState)}
+  res.send(ad)
+})
+
 app.get('/api/contracts', async (req, res) => {
   let conn = await mysql.getDBConnection()
   let token = req.headers.authtoken

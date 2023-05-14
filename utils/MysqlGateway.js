@@ -631,7 +631,6 @@ async function spotAnalysis(conn, method, input){
 
 async function getBatchToAnalyze(conn, len, chain, detectors, refilterDetector, retryErrors){
 // analysis table analyzes sourcefile, not contract. results viewer will get related contracts
-  let endOfResults = false
   let detSub = retryErrors ? "" : buildDetectorsFindSubquery(detectors, refilterDetector)
   let query = ''.concat(
     "SELECT DISTINCT c.sourcefile_signature, c.compilerVersion, csf.contract, csf.filename, sf.*, an.* FROM contract AS c ",

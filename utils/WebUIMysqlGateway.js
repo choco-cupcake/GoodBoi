@@ -123,7 +123,7 @@ async function getDetectorHits(conn, user, detector, revState, offset){
   if(!availDetectors.includes(detector))
     return {error: "Unauthorized"}
 
-  let query = "SELECT sa.ID, c.address, c.chain, sa.`rep_" + detector + "` AS report, c.poolFlag AS PF, c.balanceFlag AS BF, c.reflPoolFlag AS RPF, c.reflBalanceFlag AS RBF, c.lastTX, analysisDate AS anDate, c.compilerVersion FROM slither_analysis AS sa CROSS JOIN contract AS c ON c.`sourcefile_signature` = sa.`sourcefile_signature` WHERE sa.`" + detector + "` = 1 AND sa.`manualRev_" + detector + "` = ? ORDER BY analysisDate DESC LIMIT 500 OFFSET " + offset
+  let query = "SELECT sa.ID, c.address, c.chain, sa.`rep_" + detector + "` AS report, c.poolFlag AS PF, c.balanceFlag AS BF, c.reflPoolFlag AS RPF, c.reflBalanceFlag AS RBF, c.lastTX, sa.`anDate_" + detector + "` AS anDate, c.compilerVersion FROM slither_analysis AS sa CROSS JOIN contract AS c ON c.`sourcefile_signature` = sa.`sourcefile_signature` WHERE sa.`" + detector + "` = 1 AND sa.`manualRev_" + detector + "` = ? ORDER BY sa.`anDate_" + detector + "` DESC LIMIT 500 OFFSET " + offset
   try{
     let [data, fields] = await conn.query(query, revState)
     return data

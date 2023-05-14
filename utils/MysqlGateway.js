@@ -216,7 +216,7 @@ async function keepAlive(conn){
 }
 
 async function addSlitherAnalysisColumns(conn, columnName){
-  let query = "ALTER TABLE slither_analysis ADD COLUMN `" + columnName + "` TINYINT DEFAULT -1 AFTER failedAnalysis, ADD COLUMN `rep_" + columnName + "` TEXT, ADD COLUMN `manualRev_" + columnName + "` TINYINT DEFAULT 0 AFTER failedAnalysis;"
+  let query = "ALTER TABLE slither_analysis ADD COLUMN `" + columnName + "` TINYINT DEFAULT -1 AFTER failedAnalysis, ADD COLUMN `rep_" + columnName + "` TEXT AFTER failedAnalysis, ADD COLUMN `manualRev_" + columnName + "` TINYINT DEFAULT 0 AFTER failedAnalysis, ADD COLUMN `anDate_" + columnName + "` DATETIME DEFAULT NULL AFTER failedAnalysis;"
   try{
     await conn.query(query);
     return true
@@ -740,7 +740,7 @@ async function markContractAsErrorAnalysis(conn, sourcefile_signature, reset = f
 async function insertFindingsToDB(conn, sourcefile_signature, output){ 
   // try to update the existing record, insert if update fails 
   let subQuery = buildFindingsUpdateSubquery(output)
-  let query = "UPDATE slither_analysis AS an SET " + subQuery.subQuery + ", an.analysisDate = NOW() WHERE an.sourcefile_signature = ?"
+  let query = "UPDATE slither_analysis AS an SET " + subQuery.subQuery + " WHERE an.sourcefile_signature = ?"
   try{
     if(Object.keys(output.findings).length){ // skip if no findings
       let [data, fields] = await conn.query(query, [...subQuery.params, sourcefile_signature]);
@@ -763,6 +763,7 @@ function buildFindingsUpdateSubquery(output){
   for(let k of Object.keys(output.findings)){
     queryParts.push("an.`" + k + "` = " + output.findings[k].isHit)
     queryParts.push("an.`rep_" + k + "` = ?")
+    queryParts.push("an.`anDate_" + k + "` = NOW()")
     queryParams.push(output.findings[k].report) 
 
   }

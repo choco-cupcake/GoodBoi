@@ -95,6 +95,18 @@ Currently, the analysis module is run on demand, but in the future, when there a
 
 Since custom detectors development is incremental to filter out false positives while conducting manual inspection on hits, this module allows for the argument flag "--refilter DETECTOR_NAME", to only re-analyze hits previously detected by the provided custom detector.
 
+### Spot Scanner
+The spot scanner allows for fast research based on SQL queries, using regex and text match using '\_' and '%' placeholders. It comes handy for searches where a Slither detector would be overkill, and it allows for a full db scan in minutes instead of hours.
+
+The script can be found at scripts/spotScanner.js
+
+### Consistency checker
+This modules checks for inconsistencies in the database, fixes them and alert of the issue so that it can be inspected. 
+Inconsistencies currently checked:
+- Missing sourcefile signature
+- Missing analysis record
+- Missing balance record
+
 ### Analysis Results UI
 Not yet pretty but good UX, allows to assign to each finding a score from 1:FP to 4:Exploitable 
 
@@ -108,11 +120,15 @@ The development process follows an incremental approach, wherein subsequent phas
 - Refine detector code to account for newly discovered false positive patterns 
 	- When some false positives are recurring (forked code) and hard to filter, one can rely on function and contract names to apply filters
 - Refilter previous hits by running 'node services/slitherRunner --refilter "detector-name"'
-- If the previous run resulted in errors, retry the analysis failed in the last HOURS hours by runing 'node services/slitherRunner --retryErrors HOURS'
+- If the previous run resulted in errors
+	- Use scripts/contractsGetter to download locally the errored contracts. Inspect the full console errors and fix
+	- To fix the database records, re-run the analysis that failed in the last HOURS hours by runing 'node services/slitherRunner --retryErrors HOURS'
 
 When writing custom detectors for Slither, it is important to account for every edge case. A failure of a single detector will cause the analysis to fail for other detectors as well.
 
 Source codes of currently running custom detectors can be found in the folder /custom_detectors. They'll eventually end up in another repo.
+#### Slither detectors install
+It comes handy to have the slitherRunner service running 24/7 on a dedicated server. To install new detectors on that machine, an helper script can be found at scripts/installDetector.js
 
 ## Main Notes
 ### Analysis Flags - How to choose which contracts to analyze

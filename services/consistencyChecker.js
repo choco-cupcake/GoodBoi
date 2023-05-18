@@ -18,8 +18,6 @@ async function main(){
     await checkAnalysisRecords()
     await checkBalanceRecords()
 
-    // TODO redownload failed analysis
-
     let toWait = process.env.CONSISTENCY_CHECKER_INTERVAL * 60 * 60 * 1000 - (Date.now() - start)
     if(toWait > 0){
       await Utils.sleep(toWait)

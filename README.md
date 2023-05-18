@@ -108,7 +108,11 @@ Inconsistencies currently checked:
 - Missing balance record
 
 ### Analysis Results UI
-Not yet pretty but good UX, allows to assign to each finding a score from 1:FP to 4:Exploitable 
+Shows general stats about the system, and allows to classify detectors hits: False Positive, Ignored (if the hit is similar to other FPs, to avoid wasting time), TP Useless, TP Nice, TP Exploitable 
+
+<p align="center">
+  <img src="https://github.com/choco-cupcake/GoodBoi/raw/main/media/GoodBoi_WebUI.jpg?raw=true" alt="Architecture Design" width="400px"/>
+</p>
 
 Repo: https://github.com/giovannifranchi/goodboi-frontend
 

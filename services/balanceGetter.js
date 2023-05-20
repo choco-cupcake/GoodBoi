@@ -167,7 +167,10 @@ async function _getAllQuotes(){
   console.log("Getting ERC20 quotes");
   for(let i=1; i < ERC20_of_interest.length; i++){ // skip native ETH. kept in the same struct bc price aggregator contract accepts it
     let start = Date.now()
-    let r = await moralisGetPriceUSD(ERC20_of_interest[i].address)
+    let r = {jsonResponse: {usdPrice: 0}}
+    try{
+      r = await moralisGetPriceUSD(ERC20_of_interest[i].address)
+    }catch(e){}
     if(!isNaN(r?.jsonResponse?.usdPrice)){
       ERC20_of_interest[i]['USD_price'] = r.jsonResponse.usdPrice
       if(i == 1)

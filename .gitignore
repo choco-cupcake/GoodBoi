@@ -4,7 +4,7 @@ package-lock.json
 helpers/
 node_modules/
 trash/
-tmp_analysis/
+tmp/
 dev/
 custom_detectors/drafts
 mysqlBackup/

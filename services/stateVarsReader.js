@@ -244,6 +244,7 @@ async function refreshBatch(){
       _cwClone = JSON.parse(JSON.stringify(_cw))
       let toRead = [..._cwClone.pvtAddrVars.map(e => {e["impl"] = false; return e}), ..._cwClone.implPvtAddrVars.map(e => {e["impl"] = true; return e})]
       if(toRead.length){
+        console.log("Private vars to read: ", toRead.map(e => e.name))
         let vals = await PrivateVarsReader.getPrivateVars(dbConn, _cw.cID, null, toRead)
         if(vals && vals.length == _cw.pvtAddrVars.length + _cw.implPvtAddrVars.length){
           _cw.pvtAddrVars = vals.filter(e => !e.impl)
@@ -257,6 +258,9 @@ async function refreshBatch(){
             for(let addrVar of _cw.implVarObj.SAV)
               if(addrVar.name == pvtVar.name)
                 addrVar.val = pvtVar.val
+        }
+        else{
+          console.log("Error reading private variables")
         }
       }
     }

@@ -187,7 +187,7 @@ class Utils {
         let mappingMatchStr = line.match(mappingRegex)
         if(line.match(varRegex)){
           let _varName = this.getVarName(line)
-          if(isVarAllowed(_varName)){
+          if(this.isVarAllowed(_varName)){
             let visibility = line.match(varRegex_public) ? {} : {vsb: "pvt"}
             stateAddressVars.push({name: _varName, val: '', ...visibility})
           }

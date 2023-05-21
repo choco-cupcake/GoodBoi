@@ -243,19 +243,21 @@ async function refreshBatch(){
     for(let _cw of _contractsWIP){
       _cwClone = JSON.parse(JSON.stringify(_cw))
       let toRead = [..._cwClone.pvtAddrVars.map(e => {e["impl"] = false; return e}), ..._cwClone.implPvtAddrVars.map(e => {e["impl"] = true; return e})]
-      let vals = await PrivateVarsReader.getPrivateVars(dbConn, _cw.cID, null, toRead)
-      if(vals && vals.length == _cw.pvtAddrVars.length + _cw.implPvtAddrVars.length){
-        _cw.pvtAddrVars = vals.filter(e => !e.impl)
-        _cw.implPvtAddrVars = vals.filter(e => e.impl)
-        // move the retrieved values to the main object
-        for (pvtVar of _cw.pvtAddrVars)
-          for(let addrVar of _cw.varObj.SAV)
-            if(addrVar.name == pvtVar.name)
-              addrVar.val = pvtVar.val
-        for (pvtVar of _cw.implPvtAddrVars)
-          for(let addrVar of _cw.implVarObj.SAV)
-            if(addrVar.name == pvtVar.name)
-              addrVar.val = pvtVar.val
+      if(toRead.length){
+        let vals = await PrivateVarsReader.getPrivateVars(dbConn, _cw.cID, null, toRead)
+        if(vals && vals.length == _cw.pvtAddrVars.length + _cw.implPvtAddrVars.length){
+          _cw.pvtAddrVars = vals.filter(e => !e.impl)
+          _cw.implPvtAddrVars = vals.filter(e => e.impl)
+          // move the retrieved values to the main object
+          for (pvtVar of _cw.pvtAddrVars)
+            for(let addrVar of _cw.varObj.SAV)
+              if(addrVar.name == pvtVar.name)
+                addrVar.val = pvtVar.val
+          for (pvtVar of _cw.implPvtAddrVars)
+            for(let addrVar of _cw.implVarObj.SAV)
+              if(addrVar.name == pvtVar.name)
+                addrVar.val = pvtVar.val
+        }
       }
     }
     

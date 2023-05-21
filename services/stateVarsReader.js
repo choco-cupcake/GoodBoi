@@ -1,6 +1,6 @@
 const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');
-const PrivateVarsReader = require('../utils/privateVarReader');
+const PrivateVarsReader = require('../utils/PrivateVarReader');
 const BigNumber = require('bignumber.js');
 const Web3 = require("web3")
 const { program } = require('commander');

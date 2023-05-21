@@ -95,9 +95,10 @@ async function refreshBatch(){
       if(varObj){
         // address vars
         for(let addrVar of varObj.SAV.filter(e => {return Utils.isVarAllowed(e.name)})){
-          if(addrVar.vsb == "pvt"){
-            _contractsWIP.at(-1).pvtAddrVars.push(addrVar)
-            continue
+          if(addrVar.vsb){
+            if(addrVar.vsb == "pvt")
+              _contractsWIP.at(-1).pvtAddrVars.push(addrVar)
+            continue // constant, immutable skipped
           }
           let getterSignature = web3[0].eth.abi.encodeFunctionSignature(addrVar.name + "()")
           varsCalls.push([contract.address, getterSignature])

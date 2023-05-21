@@ -154,7 +154,9 @@ class Utils {
     // This should hold on properly written contracts (handling decent amount of money)
     const breakingKeywords = ["constructor", "function", "modifier", "receive", "fallback"]
     const varRegex = /^(address|ERC20|I[a-zA-Z0-9]{1,20}) / 
-    const varRegex_public = /^(address|ERC20|I[a-zA-Z0-9]{1,20}) public / 
+    const varRegex_public = /^(address|ERC20|I[a-zA-Z0-9]{1,20}) public / // hits not public are private
+    const varRegex_const_pvt = /(?!.*\bpublic\b)(address|ERC20|I[a-zA-Z0-9]{1,20})(?:\sprivate)? constant(?:\sprivate)?.*;/ // get the value from the code
+    const varRegex_imm_pvt = /(?!.*\bpublic\b)(address|ERC20|I[a-zA-Z0-9]{1,20})(?:\sprivate)? immutable(?:\sprivate)?.*;/ // get the value from the deployed bytecode T.T
     const arrRegex = /^(address|ERC20|IERC20)\[\] public / 
     const mappingRegex = /^mapping ?\( ?uint(256|128|64|32|16|8) ?=> ?(address|ERC20|IERC20)\) public / // same for pools
     let lines = desiredContract.split("\n")
@@ -188,8 +190,15 @@ class Utils {
         if(line.match(varRegex)){
           let _varName = this.getVarName(line)
           if(this.isVarAllowed(_varName)){
-            let visibility = line.match(varRegex_public) ? {} : {vsb: "pvt"}
-            stateAddressVars.push({name: _varName, val: '', ...visibility})
+            let visibility = {}
+            let val = ''
+            if (line.match(varRegex_const_pvt)){
+              visibility = {vsb: "pvt_const"}
+              val = this.readValueFromConstantAssignment(line)
+            }
+            else if (line.match(varRegex_imm_pvt)) visibility = {vsb: "pvt_imm"}
+            else if (!line.match(varRegex_public)) visibility = {vsb: "pvt"}
+            stateAddressVars.push({name: _varName, val: val, ...visibility}) // no vsb attribute means public
           }
         } else if(mappingMatchStr){ // in the end won't use this, but who knows in the future
           let uintSize = this.getUintSize(mappingMatchStr[0])
@@ -215,6 +224,20 @@ class Utils {
     if(!stateAddressVars.length && !mappingUintAddress.length && !stateAddressArrays.length)
       return null
     return {SAV: stateAddressVars, SAA: stateAddressArrays, SAM: mappingUintAddress}
+  }
+
+  static readValueFromConstantAssignment(line){
+    line = line.replaceAll("[]", "") // using this function also for array vars
+    let eqPos = line.indexOf("=")
+    if(eqPos >= 0){
+      line = line.substring(eqPos + 1).trim()
+    }
+    else 
+      return ''
+
+    const addrRegex = /0x[a-fA-F0-9]{40}/ // regex is used to ignore cast to interface stuff
+    const match = line.match(addrRegex);
+    return match ? match[0] : ''
   }
 
   static isVarContained(arr, varName){

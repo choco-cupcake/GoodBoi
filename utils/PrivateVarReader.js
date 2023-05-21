@@ -81,10 +81,12 @@ function executeSlitherReadStorage(workingPath, analysisPath, contractName, solc
   let jsonPath = generateJsonPath()
   let slitherParams = ['-m', 'slither.tools.read_storage.__main__', analysisPath, '--contract-name', contractName, '--solc', solcPath, "--json", path.resolve(jsonPath)]
   // run slither
-  const slitherProg = spawnSync('python3', slitherParams, {cwd: workingPath, timeout: 30000}); 
-  let err = slitherProg.stderr.toString()
-  if(err.length)
-    console.log("WARNING - stderr stuff:", err)
+  try{
+    spawnSync('python3', slitherParams, {cwd: workingPath, timeout: 30000}); 
+  }catch(e){ 
+    return null
+  }
+
   return jsonPath
 }
 

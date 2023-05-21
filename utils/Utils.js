@@ -1,3 +1,4 @@
+const os = require("os")
 const crypto = require("crypto")
 const fs = require('fs')
 const path = require('path')
@@ -111,7 +112,7 @@ class Utils {
     let breakChars = ["'", "\"", "\\", "/", '"', ' ']
     let lines = source.split('\n')
     for(let l of lines){
-      if(Utils.pattMatch(l, import_patt)){
+      if(this.pattMatch(l, import_patt)){
         let p1 = l.lastIndexOf(".sol")
         let fileName = ".sol"
         for(let i=p1-1; i>0; i--){
@@ -146,13 +147,14 @@ class Utils {
     let desiredContract = sourcefiles.filter(e => e.filename == contractName + ".sol")
     // or get the single one, or chain all of them and look for the contract definition
     if(desiredContract.length)
-      desiredContract = desiredContract[0].source
+      desiredContract = desiredContract[0].source || desiredContract[0].sourceText
     else
-      desiredContract = sourcefiles.map(e => e.source).join("\n")
+      desiredContract = sourcefiles.map(e => e.source || e.sourceText).join("\n")
     // assumption: state vars are declared before constructor/modifiers/functions. 
     // This should hold on properly written contracts (handling decent amount of money)
     const breakingKeywords = ["constructor", "function", "modifier", "receive", "fallback"]
-    const varRegex = /^(address|ERC20|I[a-zA-Z0-9]{1,20}) public / // tokens vars are public most of the times. this also simplifies the value retrieval
+    const varRegex = /^(address|ERC20|I[a-zA-Z0-9]{1,20}) / 
+    const varRegex_public = /^(address|ERC20|I[a-zA-Z0-9]{1,20}) public / 
     const arrRegex = /^(address|ERC20|IERC20)\[\] public / 
     const mappingRegex = /^mapping ?\( ?uint(256|128|64|32|16|8) ?=> ?(address|ERC20|IERC20)\) public / // same for pools
     let lines = desiredContract.split("\n")
@@ -184,7 +186,11 @@ class Utils {
         // check if is state var
         let mappingMatchStr = line.match(mappingRegex)
         if(line.match(varRegex)){
-          stateAddressVars.push({name: this.getVarName(line), val: ''})
+          let _varName = this.getVarName(line)
+          if(isVarAllowed(_varName)){
+            let visibility = line.match(varRegex_public) ? {} : {vsb: "pvt"}
+            stateAddressVars.push({name: _varName, val: '', ...visibility})
+          }
         } else if(mappingMatchStr){ // in the end won't use this, but who knows in the future
           let uintSize = this.getUintSize(mappingMatchStr[0])
           mappingUintAddress.push({name: this.getMappingName(line), uintSize: uintSize, val: []})
@@ -266,6 +272,123 @@ class Utils {
         return true
     }
     return false
+  }
+
+  static preparePath(files, contractName, targetMainContract, tempPath){
+    let foldername, folderpath, folders = new Set(), analysisDir
+    if(targetMainContract){
+      for(let file of files)
+        if(file.sourceText.match("contract " + contractName)){
+          analysisDir = file.filename
+          break;
+        }
+        analysisDir = analysisDir || "."
+    }
+    else analysisDir = "."
+
+    do{
+      foldername = this.makeid(15)
+      folderpath = path.join(tempPath, foldername)
+    }while(fs.existsSync(folderpath))
+    fs.mkdirSync(folderpath)
+    for(let f of files){
+      let writePath = path.join(folderpath, f.filename)
+
+      // clean leading '/'
+      if(f.filename.substring(0,1) == '/') f.filename = f.filename.substring(1)
+
+      let struct = f.filename.split("/")
+      let outpath = folderpath
+      if(struct.length > 1){
+        // add all layers folders
+        for(let j=0; j< struct.length - 1; j++)
+          folders.add(struct.slice(0, j+1).join("/"))
+        outpath = f.filename.substring(0, f.filename.length - struct[struct.length - 1].length - 1)
+        outpath = path.join(folderpath, outpath)
+        fs.mkdirSync(outpath, { recursive: true });
+        writePath = path.join(outpath, struct[struct.length - 1])
+      }
+      fs.writeFileSync(writePath, this.fixPragma(f.sourceText, f.compilerVersion), {flag: 'w+'});
+    }
+    folders = Array.from(folders)
+    folders.sort(function(a, b) { // inspect higher level first
+      return (a.match(/\//g) || []).length - (b.match(/\//g) || []).length
+    })
+    if(folders.length){
+      // find the master contract folder and append it to folderpath
+      analysisDir = this.getMainContractPath(files, contractName) || this.getMasterFolder(folders)
+      if(!analysisDir){
+        console.log("WARNING - can't find master folder") 
+        analysisDir = "." // will throw an error at analysis time
+      }
+    }
+    return {workingPath: path.resolve(folderpath), analysisPath: analysisDir}
+  }
+  
+  static getSolcPath(compVer){
+    const isWindows = os.platform() === 'win32'
+    let solcFolder = isWindows ? "windows-amd64" : "linux-amd64"
+    let solcVer = compVer.split("+")[0].substring(1)
+    if(solcVer.includes("-"))
+      solcVer = solcVer.split("-")[0]
+    let solcFiles = fs.readdirSync("./solc-bin/" + solcFolder)
+    for(let f of solcFiles){
+      let fVer = f.split("+")[0].substring(("solc-" + solcFolder + "-v").length)
+      if(fVer == solcVer)
+        return path.resolve("./solc-bin/" + solcFolder + "/" + f)
+    }
+    return null
+  }
+  
+  static getMainContractPath(files, contractName){
+    for(let file of files){
+      let p = file.split("/").at(-1)
+      if(p.split(".")[0] == contractName)
+        return file.substring(0, file.length - p.length - 1)
+    }
+    return null
+  }
+  
+  static getMasterFolder(folders){
+    const patterns = ["contracts", "deploy", "src"]
+    // exact match
+    for(let patt of patterns){
+      for(let folder of folders){
+        let folderName = folder.split("/").at(-1)
+        if(folderName.substring(0, patt.length) == patt)
+          return folder
+      }
+    }
+    // partial match
+    for(let patt of patterns){
+      for(let folder of folders){
+        let folderName = folder.split("/").at(-1)
+        if(folderName.includes(patt))
+          return folder
+      }
+    }
+    return null
+  }
+
+  static fixPragma(source, compilerVer){ 
+    const pragma_patt = "pragma solidity "
+    let processed = ''
+    let lines = source.split("\n")
+    for(let line of lines){
+      let lineClean = line.trim().toLowerCase()
+      if(lineClean.substring(0, pragma_patt.length) == pragma_patt){
+        try{
+          let ver = compilerVer.split("+")[0].substring(1)
+          line = pragma_patt + '>=' + ver + ';'
+        }
+        catch(e){ 
+          console.log("WARNING Error processing pragma line in fixPragma")
+          continue;
+        }
+      }
+      processed += line + "\n"
+    }
+    return processed
   }
 
   static startsWith(str, patt){

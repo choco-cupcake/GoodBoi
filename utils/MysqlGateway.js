@@ -593,6 +593,22 @@ async function getContract(conn, chain, address){
   }
 }
 
+async function getContractByID(conn, ID){
+  let query = "SELECT * FROM contract WHERE ID=?"
+  try{
+    let [data, fields] = await conn.query(query, ID);
+    if(!data.length){
+      Utils.printQueryError(query, ID, "cant find contract  by ID")
+      return null
+    }
+    return data[0]
+  }
+  catch(e){
+    Utils.printQueryError(query, [chain, address], e.message)
+    return null
+  }
+}
+
 async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
 let query = "SELECT b.ID, b.address, c.implAddress FROM balances AS b, contract AS c WHERE b.`chain`=? AND b.lastUpdate < NOW() - INTERVAL ? DAY AND c.address=b.address AND c.`chain`=b.`chain` ORDER BY c.lastTx ASC LIMIT ? "
   try{
@@ -606,7 +622,7 @@ let query = "SELECT b.ID, b.address, c.implAddress FROM balances AS b, contract 
 }
 
 async function getContractFiles(conn, contractID, address, chain){
-    // used by scripts/getContractsFiles.js
+    // used by scripts/getContractsFiles.js and sourceGetter to read private vars
     let subQ, params
     if(contractID){
       subQ = "WHERE c.ID = ?"
@@ -616,7 +632,7 @@ async function getContractFiles(conn, contractID, address, chain){
       params = [address, chain]
     }
     let query = ''.concat(
-      "SELECT c.compilerVersion, csf.contract, csf.filename, sf.*FROM contract AS c ",
+      "SELECT c.compilerVersion, csf.contract, csf.filename, sf.* FROM contract AS c ",
       "INNER JOIN contract_sourcefile AS csf ON csf.contract = c.ID ",
       "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
       "INNER JOIN slither_analysis AS an ON an.sourcefile_signature = c.sourcefile_signature ",
@@ -658,7 +674,7 @@ async function getBatchToAnalyze(conn, len, chain, detectors, refilterDetector, 
 // analysis table analyzes sourcefile, not contract. results viewer will get related contracts
   let detSub = retryErrors ? "" : buildDetectorsFindSubquery(detectors, refilterDetector)
   let query = ''.concat(
-    "SELECT DISTINCT c.sourcefile_signature, c.compilerVersion, csf.contract, csf.filename, sf.*, an.* FROM contract AS c ",
+    "SELECT DISTINCT c.sourcefile_signature, c.compilerVersion, csf.contract, c.contractName, csf.filename, sf.*, an.* FROM contract AS c ",
     "INNER JOIN contract_sourcefile AS csf ON csf.contract = c.ID ",
     "INNER JOIN sourcefile AS sf ON csf.sourcefile=sf.ID ",
     "INNER JOIN slither_analysis AS an ON an.sourcefile_signature = c.sourcefile_signature ",
@@ -1156,4 +1172,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {deleteContract, deleteAnalysis, deleteContractSourcefile, deleteSourcefile, getCountContractSourcefilesFromSourcefile, getContractSourcefilesFromContract, pushAddressToPoolTable, pruneContract, updateSourcefileSignature, getSourcefileIDs, getContractsNullSignature, spotAnalysis, updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {getContractByID, deleteContract, deleteAnalysis, deleteContractSourcefile, deleteSourcefile, getCountContractSourcefilesFromSourcefile, getContractSourcefilesFromContract, pushAddressToPoolTable, pruneContract, updateSourcefileSignature, getSourcefileIDs, getContractsNullSignature, spotAnalysis, updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

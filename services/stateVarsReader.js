@@ -1,5 +1,6 @@
 const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');
+const PrivateVarsReader = require('../utils/privateVarReader');
 const BigNumber = require('bignumber.js');
 const Web3 = require("web3")
 const { program } = require('commander');
@@ -84,15 +85,20 @@ async function refreshBatch(){
     let mapCalls = []
     let contractsWIP = []
     let _contractsWIP = []
+
     while(contractPool.length && varsCalls.length < maxReadsPerTx && (mapCalls.length * 5) < maxReadsPerTx  && (arrCalls.length * 5) < maxReadsPerTx ){ // (mapCalls.length * 5) bc we check the first 5 indexes of the uint=>addr mappings
       let contract = contractPool.pop()
-      let varObj = JSON.parse(contract.addressVars)
-      let implVarObj = contract.implVars == "NULL" ? null : JSON.parse(contract.implVars)
-      _contractsWIP.push({cID: contract.ID, contractAddress: contract.address, varObj: varObj, varObjRaw: contract.addressVars, implVarObj: implVarObj, implVarObjRaw: contract.implVars})
+      let varObj = contract.addressVars == "NULL" || !contract.addressVars ? null : JSON.parse(contract.addressVars)
+      let implVarObj = contract.implVars == "NULL" || !contract.implVars ? null : JSON.parse(contract.implVars)
+      _contractsWIP.push({cID: contract.ID, contractAddress: contract.address, varObj: varObj, varObjRaw: contract.addressVars, implVarObj: implVarObj, implVarObjRaw: contract.implVars, pvtAddrVars: [], implPvtAddrVars: []})
       // ==== addressVars
       if(varObj){
         // address vars
         for(let addrVar of varObj.SAV.filter(e => {return Utils.isVarAllowed(e.name)})){
+          if(addrVar.vsb == "pvt"){
+            _contractsWIP.at(-1).pvtAddrVars.push(addrVar)
+            continue
+          }
           let getterSignature = web3[0].eth.abi.encodeFunctionSignature(addrVar.name + "()")
           varsCalls.push([contract.address, getterSignature])
           contractsWIP.push({isImpl: false, type: 'var', cAddr: contract.address, cID: contract.ID, varName: addrVar.name, sig: getterSignature}) // to link back results from contract calls
@@ -114,6 +120,10 @@ async function refreshBatch(){
       if(implVarObj){
         // address vars
         for(let addrVar of implVarObj.SAV.filter(e => {return Utils.isVarAllowed(e.name)})){
+          if(addrVar.vsb == "pvt"){
+            _contractsWIP.at(-1).implPvtAddrVars.push(addrVar)
+            continue
+          }
           let getterSignature = web3[0].eth.abi.encodeFunctionSignature(addrVar.name + "()")
           varsCalls.push([contract.address, getterSignature])
           contractsWIP.push({isImpl: true, type: 'var', cAddr: contract.address, cID: contract.ID, varName: addrVar.name, sig: getterSignature}) // to link back results from contract calls
@@ -229,7 +239,27 @@ async function refreshBatch(){
       }
     }
 
-    // checks if contracts have to be flagged ad updates the object
+    // now look for private variables to be read in a different way
+    for(let _cw of _contractsWIP){
+      _cwClone = JSON.parse(JSON.stringify(_cw))
+      let toRead = [..._cwClone.pvtAddrVars.map(e => {e["impl"] = false; return e}), ..._cwClone.implPvtAddrVars.map(e => {e["impl"] = true; return e})]
+      let vals = await PrivateVarsReader.getPrivateVars(dbConn, _cw.cID, null, toRead)
+      if(vals && vals.length == _cw.pvtAddrVars.length + _cw.implPvtAddrVars.length){
+        _cw.pvtAddrVars = vals.filter(e => !e.impl)
+        _cw.implPvtAddrVars = vals.filter(e => e.impl)
+        // move the retrieved values to the main object
+        for (pvtVar of _cw.pvtAddrVars)
+          for(let addrVar of _cw.varObj.SAV)
+            if(addrVar.name == pvtVar.name)
+              addrVar.val = pvtVar.val
+        for (pvtVar of _cw.implPvtAddrVars)
+          for(let addrVar of _cw.implVarObj.SAV)
+            if(addrVar.name == pvtVar.name)
+              addrVar.val = pvtVar.val
+      }
+    }
+    
+    // checks if contracts have to be flagged and updates the object
     await checkFlags(_contractsWIP)
 
     // update database values
@@ -349,7 +379,7 @@ function pushToInternalAddresses(_varObj, internalAddresses){
 
 async function callContract(contract, method, params){
   let fail = 0
-  while(fail < aggregatorContract.length){ // try all rpc
+  while(fail < Math.min(4, aggregatorContract.length)){ // try all rpc
     try{
       if(contract == "aggregator")
         return await (await getAggregatorContractRoundRobin()).methods[method](params).call()

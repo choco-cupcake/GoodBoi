@@ -102,7 +102,7 @@ function generateJsonPath(){
 async function createTmpFolder(){ 
   const tmpFolderPath = path.join("./", TMP_PATH)
   if (!fs.existsSync(tmpFolderPath)){
-    fs.mkdirSync(tmpFolderPath);
+    fs.mkdirSync(tmpFolderPath, { recursive: true });
   }
   else await Utils.emptyFolder(tmpFolderPath)
 }

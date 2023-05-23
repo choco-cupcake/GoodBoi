@@ -154,9 +154,9 @@ class Utils {
     // This should hold on properly written contracts (handling decent amount of money)
     const breakingKeywords = ["constructor", "function", "modifier", "receive", "fallback"]
     const varRegex = /^(address|ERC20|I[a-zA-Z0-9]{1,20}) / 
-    const varRegex_public = /^(address|ERC20|I[a-zA-Z0-9]{1,20}) public / // hits not public are private
-    const varRegex_const_pvt = /(?!.*\bpublic\b)(address|ERC20|I[a-zA-Z0-9]{1,20})(?:\sprivate)? constant(?:\sprivate)?.*;/ // get the value from the code
-    const varRegex_imm_pvt = /(?!.*\bpublic\b)(address|ERC20|I[a-zA-Z0-9]{1,20})(?:\sprivate)? immutable(?:\sprivate)?.*;/ // get the value from the deployed bytecode T.T
+    const varRegex_public = /^(address|ERC20|I[a-zA-Z0-9]{1,20}) public / // hits not public are private -> get value from storage
+    const varRegex_const_pvt = /(?!.*\bpublic\b)(address|ERC20|I[a-zA-Z0-9]{1,20})(?:\s(private|internal))? constant(?:\s(private|internal))?/ // get the value from the code
+    const varRegex_imm_pvt = /(?!.*\bpublic\b)(address|ERC20|I[a-zA-Z0-9]{1,20})(?:\s(private|internal))? immutable(?:\s(private|internal))?/ // get the value from the constructor args
     const arrRegex = /^(address|ERC20|IERC20)\[\] public / 
     const mappingRegex = /^mapping ?\( ?uint(256|128|64|32|16|8) ?=> ?(address|ERC20|IERC20)\) public / // same for pools
     let lines = desiredContract.split("\n")
@@ -365,9 +365,11 @@ class Utils {
   
   static getMainContractPath(files, contractName){
     for(let file of files){
-      let p = file.split("/").at(-1)
-      if(p.split(".")[0] == contractName)
-        return file.substring(0, file.length - p.length - 1)
+      try{
+        let p = file.split("/").at(-1)
+        if(p.split(".")[0] == contractName)
+          return file.substring(0, file.length - p.length - 1)
+      } catch(e){return null}
     }
     return null
   }

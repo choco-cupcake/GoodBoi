@@ -1,6 +1,8 @@
+// code quality here is particularly shitty
 const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');
-const PrivateVarsReader = require('../utils/PrivateVarReader');
+const PrivateVarReader = require('../utils/PrivateVarReader');
+const PrivateImmutableVarReader = require('../utils/PrivateImmutableVarReader');
 const BigNumber = require('bignumber.js');
 const Web3 = require("web3")
 const { program } = require('commander');
@@ -90,7 +92,7 @@ async function refreshBatch(){
       let contract = contractPool.pop()
       let varObj = contract.addressVars == "NULL" || !contract.addressVars ? null : JSON.parse(contract.addressVars)
       let implVarObj = contract.implVars == "NULL" || !contract.implVars ? null : JSON.parse(contract.implVars)
-      _contractsWIP.push({cID: contract.ID, contractAddress: contract.address, varObj: varObj, varObjRaw: contract.addressVars, implVarObj: implVarObj, implVarObjRaw: contract.implVars, pvtAddrVars: [], implPvtAddrVars: []})
+      _contractsWIP.push({cID: contract.ID, contractAddress: contract.address, varObj: varObj, varObjRaw: contract.addressVars, implVarObj: implVarObj, implVarObjRaw: contract.implVars, pvtAddrVars: [], implPvtAddrVars: [], pvtImmAddrVars: [], implPvtImmAddrVars: []})
       // ==== addressVars
       if(varObj){
         // address vars
@@ -98,6 +100,8 @@ async function refreshBatch(){
           if(addrVar.vsb){
             if(addrVar.vsb == "pvt")
               _contractsWIP.at(-1).pvtAddrVars.push(addrVar)
+            if(addrVar.vsb == "pvt_imm")
+              _contractsWIP.at(-1).pvtImmAddrVars.push(addrVar)
             continue // constant, immutable skipped
           }
           let getterSignature = web3[0].eth.abi.encodeFunctionSignature(addrVar.name + "()")
@@ -121,8 +125,12 @@ async function refreshBatch(){
       if(implVarObj){
         // address vars
         for(let addrVar of implVarObj.SAV.filter(e => {return Utils.isVarAllowed(e.name)})){
-          if(addrVar.vsb == "pvt"){
-            _contractsWIP.at(-1).implPvtAddrVars.push(addrVar)
+          if(addrVar.vsb){
+            if(addrVar.vsb == "pvt"){
+              _contractsWIP.at(-1).implPvtAddrVars.push(addrVar)
+            if(addrVar.vsb == "pvt_imm")
+              _contractsWIP.at(-1).implPvtImmAddrVars.push(addrVar)
+            }
             continue
           }
           let getterSignature = web3[0].eth.abi.encodeFunctionSignature(addrVar.name + "()")
@@ -240,28 +248,54 @@ async function refreshBatch(){
       }
     }
 
-    // now look for private variables to be read in a different way
+    // now look for private variables to be read in a different way (storage read)
     for(let _cw of _contractsWIP){
       _cwClone = JSON.parse(JSON.stringify(_cw))
       let toRead = [..._cwClone.pvtAddrVars.map(e => {e["impl"] = false; return e}), ..._cwClone.implPvtAddrVars.map(e => {e["impl"] = true; return e})]
       if(toRead.length){
         console.log("Private vars to read: ", toRead.map(e => e.name))
-        let vals = await PrivateVarsReader.getPrivateVars(dbConn, _cw.cID, null, toRead)
+        let vals = await PrivateVarReader.getPrivateVars(dbConn, _cw.cID, null, toRead)
         if(vals && vals.length == _cw.pvtAddrVars.length + _cw.implPvtAddrVars.length){
           _cw.pvtAddrVars = vals.filter(e => !e.impl)
           _cw.implPvtAddrVars = vals.filter(e => e.impl)
           // move the retrieved values to the main object
           for (pvtVar of _cw.pvtAddrVars)
             for(let addrVar of _cw.varObj.SAV)
-              if(addrVar.name == pvtVar.name)
+              if(addrVar.name == pvtVar.name && pvtVar.val)
                 addrVar.val = pvtVar.val
           for (pvtVar of _cw.implPvtAddrVars)
             for(let addrVar of _cw.implVarObj.SAV)
-              if(addrVar.name == pvtVar.name)
+              if(addrVar.name == pvtVar.name && pvtVar.val)
                 addrVar.val = pvtVar.val
         }
         else{
           console.log("Error reading private variables")
+        }
+      }
+    }
+
+    // and now look for private immutable variables to be read in another different way (constructor arguments) pvtImmAddrVars
+    for(let _cw of _contractsWIP){
+      _cwClone = JSON.parse(JSON.stringify(_cw))
+      let toRead = [..._cwClone.pvtImmAddrVars.map(e => {e["impl"] = false; return e}), ..._cwClone.implPvtImmAddrVars.map(e => {e["impl"] = true; return e})]
+      if(toRead.length){
+        console.log("Private immutable vars to read: ", toRead.map(e => e.name))
+        let vals = await PrivateImmutableVarReader.getPrivateVars(dbConn, _cw.cID, null, toRead)
+        if(vals && vals.length == _cw.pvtAddrVars.length + _cw.implPvtAddrVars.length){
+          _cw.pvtAddrVars = vals.filter(e => !e.impl)
+          _cw.implPvtAddrVars = vals.filter(e => e.impl)
+          // move the retrieved values to the main object
+          for (pvtVar of _cw.pvtAddrVars)
+            for(let addrVar of _cw.varObj.SAV)
+              if(addrVar.name == pvtVar.name && pvtVar.val)
+                addrVar.val = pvtVar.val
+          for (pvtVar of _cw.implPvtAddrVars)
+            for(let addrVar of _cw.implVarObj.SAV)
+              if(addrVar.name == pvtVar.name && pvtVar.val)
+                addrVar.val = pvtVar.val
+        }
+        else{
+          console.log("Warning: immutable variables not found")
         }
       }
     }

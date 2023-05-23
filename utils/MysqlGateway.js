@@ -1013,7 +1013,7 @@ async function pushAddressesToPoolBatch(conn, chain, addressesList){
 
 async function updateLastTxBatch(conn, chain, addressBatch){
   addressList = "('" + addressBatch.map(e => e.toLowerCase()).join("','") + "')"
-  let query = "UPDATE contract SET lastTx = NOW() WHERE chain = ? AND LOWER(address) IN " + addressList + ";"
+  let query = "UPDATE contract SET lastTx = NOW(), txCount = txCount + 1 WHERE chain = ? AND LOWER(address) IN " + addressList + ";"
   let err = 0
   while(err < 5){ // hack for deadlock issues inspected but not understood - most of the times 2 try is enough and is not worsening performances
     try{

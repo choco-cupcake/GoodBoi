@@ -60,7 +60,7 @@ async function getPrivateVars(conn, contractID, contractFiles, vars){
   }
 
   fs.rmSync(path.workingPath, { recursive: true, force: true })
-  fs.rmSync(resultPath)
+  fs.rmSync(resultPath, { force: true })
 
   return vars
 }

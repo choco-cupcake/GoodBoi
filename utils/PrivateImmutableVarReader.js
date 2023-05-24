@@ -5,13 +5,6 @@ const mysql = require('./MysqlGateway');
 const Utils = require('./Utils');
 const TMP_PATH = "tmp/tmp_pvt_vars_read"
 
-main()
-
-async function main(){
-  let dbConn = await mysql.getDBConnection()
-  await getPrivateImmutableVars(dbConn, 2174583, null, [{name: "proxyRegistryAddress"}])
-}
-
 async function getPrivateImmutableVars(conn, contractID, contractFiles, vars){
   await createTmpFolder()
 

@@ -188,17 +188,19 @@ class Utils {
         // check if is state var
         let mappingMatchStr = line.match(mappingRegex)
         if(line.match(varRegex)){
-          let _varName = this.getVarName(line)
-          if(this.isVarAllowed(_varName)){
-            let visibility = {}
-            let val = ''
-            if (line.match(varRegex_const_pvt)){
-              visibility = {vsb: "pvt_const"}
-              val = this.readValueFromConstantAssignment(line)
+          let _varsName = this.getVarName(line)
+          for(let _varName of _varsName){
+            if(this.isVarAllowed(_varName)){
+              let visibility = {}
+              let val = ''
+              if (line.match(varRegex_const_pvt)){
+                visibility = {vsb: "pvt_const"}
+                val = this.readValueFromConstantAssignment(line)
+              }
+              else if (line.match(varRegex_imm_pvt)) visibility = {vsb: "pvt_imm"}
+              else if (!line.match(varRegex_public)) visibility = {vsb: "pvt"}
+              stateAddressVars.push({name: _varName, val: val, ...visibility}) // no vsb attribute means public
             }
-            else if (line.match(varRegex_imm_pvt)) visibility = {vsb: "pvt_imm"}
-            else if (!line.match(varRegex_public)) visibility = {vsb: "pvt"}
-            stateAddressVars.push({name: _varName, val: val, ...visibility}) // no vsb attribute means public
           }
         } else if(mappingMatchStr){ // in the end won't use this, but who knows in the future
           let uintSize = this.getUintSize(mappingMatchStr[0])
@@ -261,8 +263,13 @@ class Utils {
     if(eqPos >= 0){
       line = line.substring(0, eqPos).trim()
     }
-    let words = line.split(" ")
-    return words[words.length - 1].trim()
+    let _vars = line.split(",")
+    let ret = []
+    for(_v of _vars){
+      let words = _v.trim().split(" ")
+      ret.push(words[words.length - 1].trim())
+    }
+    return ret
   }
 
   static getMappingName(line){

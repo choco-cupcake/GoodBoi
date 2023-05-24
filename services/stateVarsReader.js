@@ -100,9 +100,9 @@ async function refreshBatch(){
           if(addrVar.vsb){
             if(addrVar.vsb == "pvt")
               _contractsWIP.at(-1).pvtAddrVars.push(addrVar)
-            if(addrVar.vsb == "pvt_imm")
+            else if(addrVar.vsb == "pvt_imm")
               _contractsWIP.at(-1).pvtImmAddrVars.push(addrVar)
-            continue // constant, immutable skipped
+            continue 
           }
           let getterSignature = web3[0].eth.abi.encodeFunctionSignature(addrVar.name + "()")
           varsCalls.push([contract.address, getterSignature])
@@ -126,11 +126,10 @@ async function refreshBatch(){
         // address vars
         for(let addrVar of implVarObj.SAV.filter(e => {return Utils.isVarAllowed(e.name)})){
           if(addrVar.vsb){
-            if(addrVar.vsb == "pvt"){
+            if(addrVar.vsb == "pvt")
               _contractsWIP.at(-1).implPvtAddrVars.push(addrVar)
-            if(addrVar.vsb == "pvt_imm")
+            else if(addrVar.vsb == "pvt_imm")
               _contractsWIP.at(-1).implPvtImmAddrVars.push(addrVar)
-            }
             continue
           }
           let getterSignature = web3[0].eth.abi.encodeFunctionSignature(addrVar.name + "()")
@@ -299,7 +298,7 @@ async function refreshBatch(){
         }
       }
     }
-    
+
     // checks if contracts have to be flagged and updates the object
     await checkFlags(_contractsWIP)
 
@@ -404,18 +403,22 @@ function callsToRawArray(callObj){
 }
 
 function pushToInternalAddresses(_varObj, internalAddresses){
-  for(let sav of _varObj.SAV.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && e.val != "0x0"})){
+  for(let sav of _varObj.SAV.filter(e => {return Utils.isVarAllowed(e.name) && e.val && e.val.length && notAddresZero(e.val)})){
     internalAddresses.push(sav.val)
   }
-  for(let sam of _varObj.SAM.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && e.val != "0x0"})){
+  for(let sam of _varObj.SAM.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && notAddresZero(e.val)})){
     for(let a of sam.val)
       internalAddresses.push(a)
   }
-  for(let saa of _varObj.SAA.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && e.val != "0x0"})){
+  for(let saa of _varObj.SAA.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && notAddresZero(e.val)})){
     for(let a of saa.val)
       internalAddresses.push(a)
   }
   
+}
+
+function notAddresZero(addr){
+  return addr != "0x0" && addr != "0x0000000000000000000000000000000000000000"
 }
 
 async function callContract(contract, method, params){

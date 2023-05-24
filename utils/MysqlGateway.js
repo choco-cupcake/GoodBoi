@@ -216,7 +216,7 @@ async function getBatchVarsToRead(conn, chain){
   const waitDays = process.env.STATE_VARS_WAIT_DAYS
   let query = `SELECT c1.ID, c1.address, c1.addressVars, c1.implAddress, c2.addressVars AS "implVars" FROM contract AS c1 
   LEFT JOIN contract AS c2 ON c1.chain=c2.chain AND c1.implAddress = c2.address
-  WHERE c1.chain = ? AND c1.contractName != 'UniswapV2Pair' AND c1.contractName != 'UniswapV3Pool AND c1.contractName != 'GnosisSafeProxy' 
+  WHERE c1.chain = ? AND c1.contractName != 'UniswapV2Pair' AND c1.contractName != 'UniswapV3Pool' AND c1.contractName != 'GnosisSafeProxy' 
   AND (c1.addressVars IS NOT NULL OR (c1.implAddress IS NOT NULL AND c1.implAddress != "0x0" AND c2.addressVars IS NOT NULL))
   AND DATE_SUB(NOW(), INTERVAL ? DAY) > c1.dateFound 
   AND (DATE_SUB(NOW(), INTERVAL ? DAY) > c1.varsCheckedAt OR c1.varsCheckedAt IS NULL) LIMIT 1000;`

@@ -254,7 +254,7 @@ async function refreshBatch(){
       if(toRead.length){
         console.log("Private vars to read: ", toRead.map(e => e.name))
         let vals = await PrivateVarReader.getPrivateVars(dbConn, _cw.cID, null, toRead)
-        if(vals && vals.length == _cw.pvtAddrVars.length + _cw.implPvtAddrVars.length){
+        if(vals && vals.length){
           _cw.pvtAddrVars = vals.filter(e => !e.impl)
           _cw.implPvtAddrVars = vals.filter(e => e.impl)
           // move the retrieved values to the main object
@@ -280,7 +280,7 @@ async function refreshBatch(){
       if(toRead.length){
         console.log("Private immutable vars to read: ", toRead.map(e => e.name))
         let vals = await PrivateImmutableVarReader.getPrivateVars(dbConn, _cw.cID, null, toRead)
-        if(vals && vals.length == _cw.pvtAddrVars.length + _cw.implPvtAddrVars.length){
+        if(vals && vals.length){
           _cw.pvtAddrVars = vals.filter(e => !e.impl)
           _cw.implPvtAddrVars = vals.filter(e => e.impl)
           // move the retrieved values to the main object

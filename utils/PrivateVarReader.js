@@ -35,6 +35,7 @@ async function getPrivateVars(conn, contractID, contractFiles, vars){
     let varObj = storageLayout[_var.name]
     if(!varObj){
       console.log("Warning, variable " + _var.name + " not found")
+      continue
     }
 
     // get random RPC

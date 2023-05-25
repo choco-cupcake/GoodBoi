@@ -265,7 +265,7 @@ class Utils {
     }
     let _vars = line.split(",")
     let ret = []
-    for(_v of _vars){
+    for(let _v of _vars){
       let words = _v.trim().split(" ")
       ret.push(words[words.length - 1].trim())
     }

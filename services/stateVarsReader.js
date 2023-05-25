@@ -60,7 +60,7 @@ async function main(){
 }
 
 async function getWETHPrice(){
-  let ERC20PricesCached = JSON.parse(await mysql.getFromCache(dbConn,"ERC20_" + chain))
+  let ERC20PricesCached = JSON.parse(await mysql.getFromCache(dbConn,"ERC20_" + chain, true))
   WETHPrice = ERC20PricesCached[0].USD_price
   minPoolWETH = new BigNumber(process.env.FLAGGER_CONTRACT_MIN_POOL_USD).times(new BigNumber(10).exponentiatedBy(ERC20PricesCached[0].decimals)).div(WETHPrice).toFixed(0) // only used for UniV2 pools
 }

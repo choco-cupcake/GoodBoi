@@ -267,7 +267,9 @@ class Utils {
     let ret = []
     for(let _v of _vars){
       let words = _v.trim().split(" ")
-      ret.push(words[words.length - 1].trim())
+      let varname = words[words.length - 1].trim()
+      if(varname.length)
+        ret.push(varname)
     }
     return ret
   }

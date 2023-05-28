@@ -253,7 +253,7 @@ async function addSlitherAnalysisColumns(conn, columnName){
 }
 
 async function getSlitherAnalysisColumns(conn){
-  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis' AND `COLUMN_NAME` NOT IN ('ID','sourcefile_signature','failedAnalysis','error','analysisDate');"
+  let query = "SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='goodboi' AND `TABLE_NAME`='slither_analysis' AND `COLUMN_NAME` NOT IN ('ID','sourcefile_signature','failedAnalysis','error','failedAnalysisDate');"
   try{
     let [data, fields] = await conn.query(query)
     if(!data.length){
@@ -684,7 +684,7 @@ async function getBatchToAnalyze(conn, len, chain, detectors, refilterDetector, 
     " INNER JOIN slither_analysis AS an ON an.sourcefile_signature = c.sourcefile_signature ",
     " WHERE ",
     retryErrors ? " an.failedAnalysis > 0 " : " an.failedAnalysis = 0 ",
-    retryErrors ? " AND DATE_SUB(NOW(), INTERVAL " + retryErrors + " HOUR) < an.analysisDate " : "", // only recheck failed analysis in the last retryErrors hours
+    retryErrors ? " AND DATE_SUB(NOW(), INTERVAL " + retryErrors + " HOUR) < an.failedAnalysisDate " : "", // only recheck failed analysis in the last retryErrors hours
     " AND (c.poolFlag=1 OR c.balanceFlag=1 OR c.reflPoolFlag=1 OR c.reflBalanceFlag=1)",
     chain != 'all' ? "  AND c.chain = ? " : "",
     detSub, // keeps only contracts not yet analyzed for these detectors
@@ -762,7 +762,7 @@ async function markContractAsErrorAnalysis(conn, sourcefile_signature, reset = f
   let query = reset ?
     "UPDATE slither_analysis AS an SET an.failedAnalysis = 0, an.error = ? WHERE an.sourcefile_signature = ?"
     :
-    "UPDATE slither_analysis AS an SET an.failedAnalysis = an.failedAnalysis + 1, an.error = ?, an.analysisDate = NOW() WHERE an.sourcefile_signature = ?"
+    "UPDATE slither_analysis AS an SET an.failedAnalysis = an.failedAnalysis + 1, an.error = ?, an.failedAnalysisDate = NOW() WHERE an.sourcefile_signature = ?"
   try{
     let [data, fields] = await conn.query(query, [error, sourcefile_signature]);
     if(!data.affectedRows){

@@ -1008,30 +1008,36 @@ async function pushAddressesToPoolBatch(conn, chain, addressesList){
   let toInsert = newAddresses.concat(toRecheck)
   let toUpdateLastTx = prevInsert.filter(e => e.verified == 1).map(e => e.address)
   if(newAddresses.length)
-    await pushAddressToParsedTableBatch(conn, chain, newAddresses)
+    pushAddressToParsedTableBatch(conn, chain, newAddresses)
   if(toInsert.length)
-    await pushAddressToPoolTableBatch(conn, chain, toInsert, 'addresspool')
+    pushAddressToPoolTableBatch(conn, chain, toInsert, 'addresspool')
   
-  if(toUpdateLastTx.length)
-    await updateLastTxBatch(conn, chain, toUpdateLastTx)
+  //if(toUpdateLastTx.length)
+  //  await updateLastTxBatch(conn, chain, toUpdateLastTx)
 
   console.log(newAddresses.length + " of " + addressesList.length + " new contracts added to db, " + toRecheck.length + " rechecks")
+  return toUpdateLastTx
 }
 
 async function updateLastTxBatch(conn, chain, addressBatch){
-  addressList = "('" + addressBatch.map(e => e.toLowerCase()).join("','") + "')"
-  let query = "UPDATE contract SET lastTx = NOW(), txCount = txCount + 1 WHERE chain = ? AND LOWER(address) IN " + addressList + ";"
+  console.log(addressBatch.length) // TODO remove after checking it live for a while
+  addressList = "('" + addressBatch.join("','") + "')"
+  let query = "UPDATE contract SET lastTx = NOW(), txCount = txCount + 1 WHERE chain = ? AND address IN " + addressList + ";"
   let err = 0
-  while(err < 5){ // hack for deadlock issues inspected but not understood - most of the times 2 try is enough and is not worsening performances
+  while(err < 3){ // old hack for a deadlock issue now fixed, but sometimes it still happens
     try{
       let [data, fields] = await conn.query(query, chain);
       break;
     }
     catch(e){
+      console.log(e.message)
       console.log("Error updating lastTx")
       err++
     }
   }
+  if(err == 3)
+    return false
+  return true
 }
 
 async function updateLastTx(conn, chain, address){
@@ -1179,4 +1185,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {getContractByID, deleteContract, deleteAnalysis, deleteContractSourcefile, deleteSourcefile, getCountContractSourcefilesFromSourcefile, getContractSourcefilesFromContract, pushAddressToPoolTable, pruneContract, updateSourcefileSignature, getSourcefileIDs, getContractsNullSignature, spotAnalysis, updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {updateLastTxBatch, getContractByID, deleteContract, deleteAnalysis, deleteContractSourcefile, deleteSourcefile, getCountContractSourcefilesFromSourcefile, getContractSourcefilesFromContract, pushAddressToPoolTable, pruneContract, updateSourcefileSignature, getSourcefileIDs, getContractsNullSignature, spotAnalysis, updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

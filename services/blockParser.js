@@ -7,9 +7,11 @@ const axios = require("axios")
 let web3 = [], web3Index = 0, web3IndexLastLoop = 0
 const contrAggregatorABI = JSON.parse('[{"inputs":[{"internalType":"address[]","name":"targets","type":"address[]"}],"name":"areContracts","outputs":[{"internalType":"bool[]","name":"","type":"bool[]"}],"stateMutability":"view","type":"function"}]')
 let dbConn 
+let lastTxBuffer = [] // need to be aggregated and sent separatedly, since multiple concurrent workers pick up the same 'to' address -> deadlock
 let aggregatorContract = [] 
 let toAddressBuffer = []
 let lastBlockParsed, lastParsedTS
+let updateLastTxTimer, updateLastTxLock
 
 program
   .option('--chain <string>', 'chain to operate on');
@@ -61,7 +63,10 @@ async function parseBlocks(){
   // get current block
   let currentBlock = await (await getWeb3RoundRobin()).eth.getBlockNumber()
   console.log("currentBlock:",currentBlock)
-
+  // set/refresh interval update lastTx
+  if(updateLastTxTimer)
+    clearInterval(updateLastTxTimer)
+  updateLastTxTimer = setInterval(() => {sendUpdateLastTx(dbConn, chain)}, 5000)
   // loop parse blocks
   let err = 0
   for(let i=lastBlockParsed + 1; i <= currentBlock - 2; i+=3){
@@ -98,7 +103,9 @@ async function parseBlock(blockIndex, currentBlock){
       if(toAddressBuffer.length >= process.env.IS_CONTRACT_BATCH_LEN || (blockIndex == currentBlock)){
         let areContracts = await (await getAggregatorContractRoundRobin()).methods.areContracts(toAddressBuffer).call()
         let toContracts = toAddressBuffer.filter((e,index) => areContracts[index])
-        mysql.pushAddressesToPoolBatch(dbConn, chain, toContracts)
+        let toUpdateLastTx = await mysql.pushAddressesToPoolBatch(dbConn, chain, toContracts)
+        // push toUpdateLastTx to global list
+        lastTxBuffer.push(...toUpdateLastTx)
         await mysql.updateLastParsedBlock(dbConn, blockIndex, chain)
         let parsedBlocks = blockIndex - lastBlockParsed
         let elapsed = Date.now() - lastParsedTS
@@ -117,6 +124,20 @@ async function parseBlock(blockIndex, currentBlock){
     return false
   }
   return true
+}
+
+async function sendUpdateLastTx(dbConn, chain){ // called by timer to remove duplicates and send query
+  if(!lastTxBuffer.length || updateLastTxLock)
+    return
+  // remove duplicates
+  lastTxBuffer = [...(new Set(lastTxBuffer))]
+  // send query
+  updateLastTxLock = true
+  let success = await mysql.updateLastTxBatch(dbConn, chain, lastTxBuffer)
+  if (success){
+    lastTxBuffer.length = 0
+  }
+  updateLastTxLock = false
 }
 
 async function getBlockObject(blockNumber){ // doNotFetchNext=true if its last block or if its a next block fetch call

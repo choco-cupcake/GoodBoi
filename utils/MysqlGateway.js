@@ -439,9 +439,9 @@ async function checkPruneContract(conn, chain, contractAddress, totalUSDValue, i
     // check if to prune
     let query = "SELECT (poolFlag=0 AND balanceFlag=0 AND reflPoolFlag=0 AND reflBalanceFlag=0) AND address NOT IN (SELECT implAddress FROM contract WHERE chain=?)) AS toPrune FROM contract WHERE address = ? AND `chain` = ?"; 
     try{
-      let [data, fields] = await conn.query(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, chain, contractAddress, chain]); 
+      let [data, fields] = await conn.query(query, [chain, contractAddress, chain]); 
       if(!data.length){
-        Utils.printQueryError(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, contractAddress, chain], "Error checking contract pruning - row not found")
+        Utils.printQueryError(query, [contractAddress, chain], "Error checking contract pruning - row not found")
         return false
       }
       if(data[0].toPrune){
@@ -450,7 +450,7 @@ async function checkPruneContract(conn, chain, contractAddress, totalUSDValue, i
       }
     }
     catch(e){
-      Utils.printQueryError(query, [process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS, contractAddress, chain], "Error checking contract pruning - " + e.message)
+      Utils.printQueryError(query, [contractAddress, chain], "Error checking contract pruning - " + e.message)
       return false
     }
   }

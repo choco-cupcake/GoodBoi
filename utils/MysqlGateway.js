@@ -437,7 +437,7 @@ async function checkPruneContract(conn, chain, contractAddress, totalUSDValue, i
     return false
   if(process.env.CONTRACT_PRUNER_ENABLED && Number(totalUSDValue) < Number(process.env.CONTRACT_PRUNER_MIN_BALANCE)){
     // check if to prune
-    let query = "SELECT (poolFlag=0 AND balanceFlag=0 AND reflPoolFlag=0 AND reflBalanceFlag=0) AND address NOT IN (SELECT implAddress FROM contract WHERE chain=?)) AS toPrune FROM contract WHERE address = ? AND `chain` = ?"; 
+    let query = "SELECT (poolFlag=0 AND balanceFlag=0 AND reflPoolFlag=0 AND reflBalanceFlag=0) AND address NOT IN (SELECT implAddress FROM contract WHERE chain=? AND (poolFlag=1 OR balanceFlag=1 OR reflPoolFlag=1 OR reflBalanceFlag=1))) AS toPrune FROM contract WHERE address = ? AND `chain` = ?"; 
     try{
       let [data, fields] = await conn.query(query, [chain, contractAddress, chain]); 
       if(!data.length){

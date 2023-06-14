@@ -12,6 +12,7 @@ let aggregatorContract = []
 let toAddressBuffer = []
 let lastBlockParsed, lastParsedTS
 let updateLastTxTimer, updateLastTxLock
+let parsedBuffer = []
 
 program
   .option('--chain <string>', 'chain to operate on');
@@ -34,6 +35,7 @@ bootstrapWeb3()
 main()
 
 async function main(){
+  setInterval(logParsed, 5000)
   while(true){
     let start = Date.now()
     await parseBlocks()
@@ -107,10 +109,7 @@ async function parseBlock(blockIndex, currentBlock){
         // push toUpdateLastTx to global list
         lastTxBuffer.push(...toUpdateLastTx)
         await mysql.updateLastParsedBlock(dbConn, blockIndex, chain)
-        let parsedBlocks = blockIndex - lastBlockParsed
-        let elapsed = Date.now() - lastParsedTS
-        let bs = Number((parsedBlocks * 1000000 / elapsed).toFixed(0)) / 1000
-        console.log("Parsed " + parsedBlocks + " blocks in " + elapsed + " seconds - " + bs + " blocks/sec")
+        parsedBuffer.unshift({datetime: Date.now(), parsed: blocksToParse})
         lastBlockParsed = blockIndex
         lastParsedTS = Date.now()
         toAddressBuffer.length = 0
@@ -124,6 +123,22 @@ async function parseBlock(blockIndex, currentBlock){
     return false
   }
   return true
+}
+
+function logParsed(){
+  let tot = 0
+  for(let i=parsedBuffer.length-1;i>=0;i--){
+    if((Date.now() - parsedBuffer[i].datetime) > 60000){
+      parsedBuffer.pop()
+    } else{
+      tot += parsedBuffer[i].parsed
+    }
+  }
+  if(tot == 0)
+    return
+  let elapsed = 60000
+  let bs = Number((tot * 1000000 / elapsed).toFixed(0)) / 1000
+  console.log("Parsed " + tot + " blocks in last 60 secs - " + bs + " blocks/sec")
 }
 
 async function sendUpdateLastTx(dbConn, chain){ // called by timer to remove duplicates and send query

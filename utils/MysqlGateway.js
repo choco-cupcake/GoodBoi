@@ -1020,7 +1020,6 @@ async function pushAddressesToPoolBatch(conn, chain, addressesList){
 }
 
 async function updateLastTxBatch(conn, chain, addressBatch){
-  console.log(addressBatch.length) // TODO remove after checking it live for a while
   addressList = "('" + addressBatch.join("','") + "')"
   let query = "UPDATE contract SET lastTx = NOW(), txCount = txCount + 1 WHERE chain = ? AND address IN " + addressList + ";"
   let err = 0

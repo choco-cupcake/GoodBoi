@@ -20,7 +20,7 @@ const scannerEndpoints = require("../data/scanners_API_endpoints")
 const apiEndpoint = scannerEndpoints.endpoints[chain]
 const scannerApiKey = scannerEndpoints.apikeys[chain]
 const axiosConfig = scannerEndpoints.axiosConfig[chain]
-
+const ignoredContracts = ["GnosisSafeProxy","CollectNFT","Holographer","ChannelImplementation","TransparentUpgradeableProxy"] // a lot of instances, not interesting
 
 let addressBuffer = []
 let mysqlConn
@@ -98,6 +98,10 @@ async function crawlSourceCode(chain, address){
 	if(contractInfo.ABI == "Contract source code not verified"){
 		await mysql.markAsUnverified(mysqlConn, chain, address)
 		console.log("unverified")
+		return
+	}
+	if(ignoredContracts.includes(contractInfo.ContractName)){
+		console.log("Ignored '" + contractInfo.ContractName + "' contract instance")
 		return
 	}
 	if(!contractInfo.SourceCode){

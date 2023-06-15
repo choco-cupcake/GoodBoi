@@ -1,6 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const { Worker } = require('worker_threads');
+const config = require('../data/config')
 const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');
 const Detectors = require('../data/slither_detectors');
@@ -29,7 +30,7 @@ if(cliOptions.retryErrors){
 if(cliOptions.refilter)
   console.log("Refiltering detector: " + cliOptions.refilter)
 
-const slitherInstances = process.env.SLITHER_INSTANCES
+const slitherInstances = config.slitherAnalysis.slitherInstances
 const poolSize = slitherInstances * 100
 const INSTANCE_TIMEOUT = 120000
 let mysqlConn

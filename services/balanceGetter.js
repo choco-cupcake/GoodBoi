@@ -1,4 +1,5 @@
 require("dotenv").config()
+const config = require('../data/config')
 const Moralis = require("moralis").default;
 const BigNumber = require('bignumber.js');
 const Web3 = require("web3")
@@ -8,10 +9,10 @@ const Utils = require('../utils/Utils');
 const mysql = require('../utils/MysqlGateway');
 const uniV3Quoter = require('../utils/uniV3Quoter');
 const priceAggregatorABI = '[{"constant":true,"inputs":[{"name":"user","type":"address"},{"name":"token","type":"address"}],"name":"tokenBalance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"users","type":"address[]"},{"name":"tokens","type":"address[]"}],"name":"balances","outputs":[{"name":"","type":"uint256[]"}],"payable":false,"stateMutability":"view","type":"function"},{"payable":true,"stateMutability":"payable","type":"fallback"}]'
-const aggrAddrPerTime = process.env.AGGREGATED_ADDRESS_SIZE
-const parallelCrawlers = process.env.PARALLEL_CRAWLERS
-const dbBatchSize = process.env.BALANCES_DB_BATCH_SIZE
-const daysOld = process.env.BALANCE_REFRESH_DAYS
+const aggrAddrPerTime = config.balanceGetter.aggregatedAddressSize
+const parallelCrawlers = config.balanceGetter.parallelCrawlers
+const dbBatchSize = config.balanceGetter.dbBatchSize
+const daysOld = config.balanceGetter.balanceRefreshInterval_days
 
 program
   .option('--chain <string>', 'chain to operate on');
@@ -60,7 +61,7 @@ async function main(){
     }
     else console.log("All balances are up to date. Return")
     console.log("loop done")
-    let toWait = process.env.BALANCE_GETTER_RUN_INTERVAL_HOURS * 60 * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
+    let toWait = config.balanceGetter.runInterval_minutes * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
     if(toWait > 0){
       await Utils.sleep(toWait)
     }
@@ -198,8 +199,9 @@ async function checkAndFill(chain) {
 }
 
 async function moralisGetPriceUSD(address){ 
+  let chainID = Utils.chainToMoralisID(chain)
   return await Moralis.EvmApi.token.getTokenPrice({
-    "chain": Utils.chainToMoralisID(chain),
+    "chain": chainID,
     "address": address
   });
 }

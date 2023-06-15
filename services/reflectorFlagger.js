@@ -1,8 +1,9 @@
 require("dotenv").config()
+const config = require('../data/config')
 const mysql = require('../utils/MysqlGateway');
 const Utils = require('../utils/Utils');
 
-const reflectInstances = process.env.REFLECT_PARALLEL_INSTANCES
+const reflectInstances = config.analysisFlag.reflectedFlag.parallelInstances
 
 let mysqlConn, toreflectPool, processed=0, reflections=0
 
@@ -15,7 +16,7 @@ async function main(){
     console.log("loop started")
     let start = Date.now()
     await reflectAllFlags()
-    let toWait = process.env.REFLECTOR_RUN_INTERVAL_MINUTES * 60 * 1000 - (Date.now() - start) 
+    let toWait = config.analysisFlag.reflectedFlag.runInterval_minutes * 60 * 1000 - (Date.now() - start) 
     console.log("loop done")
     if(toWait > 0){
       await Utils.sleep(toWait)

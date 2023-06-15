@@ -1,5 +1,6 @@
 // code quality here is particularly shitty
 const mysql = require('../utils/MysqlGateway');
+const config = require('../data/config')
 const Utils = require('../utils/Utils');
 const PrivateVarReader = require('../utils/PrivateVarReader');
 const PrivateImmutableVarReader = require('../utils/PrivateImmutableVarReader');
@@ -8,7 +9,7 @@ const Web3 = require("web3")
 const { program } = require('commander');
 const aggregatorABI = '[{"inputs":[{"components":[{"internalType":"address","name":"contractAddress","type":"address"},{"internalType":"bytes4","name":"getterSelector","type":"bytes4"}],"internalType":"struct GetValueAggregator.InputObj[]","name":"input","type":"tuple[]"}],"name":"getMappingValue","outputs":[{"components":[{"internalType":"address","name":"contractAddress","type":"address"},{"internalType":"bytes4","name":"getterSelector","type":"bytes4"},{"internalType":"address[]","name":"readVal","type":"address[]"}],"internalType":"struct GetValueAggregator.OutputMappingObj[]","name":"","type":"tuple[]"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"components":[{"internalType":"address","name":"contractAddress","type":"address"},{"internalType":"bytes4","name":"getterSelector","type":"bytes4"}],"internalType":"struct GetValueAggregator.InputObj[]","name":"input","type":"tuple[]"}],"name":"getVarValue","outputs":[{"components":[{"internalType":"address","name":"contractAddress","type":"address"},{"internalType":"bytes4","name":"getterSelector","type":"bytes4"},{"internalType":"address","name":"readVal","type":"address"}],"internalType":"struct GetValueAggregator.OutputVariableObj[]","name":"","type":"tuple[]"}],"stateMutability":"nonpayable","type":"function"}]'
 const flaggerABI = '[{"inputs": [{"components": [{"internalType": "address","name": "_contract","type": "address"},{"internalType": "address[]","name": "internalAddresses","type": "address[]"}],"internalType": "struct PolygonFlagger.Input[]","name": "contracts","type": "tuple[]"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"}],"name": "areInterestingContract","outputs": [{"components": [{"internalType": "address","name": "_contract","type": "address"},{"internalType": "uint8","name": "flag","type": "uint8"}],"internalType": "struct PolygonFlagger.Output[]","name": "","type": "tuple[]"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "inpAddr","type": "address"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"}],"name": "hasPool","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "inpAddr","type": "address"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"}],"name": "hasPoolQuickswap","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "inpAddr","type": "address"}],"name": "hasPoolUniV3","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "inpAddr","type": "address"}],"name": "isERC20","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "mainContract","type": "address"},{"internalType": "address[]","name": "internalAddresses","type": "address[]"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"},{"internalType": "uint256","name": "_gasMargin","type": "uint256"}],"name": "isInterestingContract","outputs": [{"internalType": "uint8","name": "","type": "uint8"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "inpAddr","type": "address"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"}],"name": "isPool","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "pool","type": "address"},{"internalType": "uint256","name": "minPoolWeth","type": "uint256"}],"name": "isPoolQuickswap","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "poolAddr","type": "address"}],"name": "isUniswapV3Pool","outputs": [{"internalType": "bool","name": "","type": "bool"}],"stateMutability": "nonpayable","type": "function"},{"anonymous": false,"inputs": [{"indexed": true,"internalType": "address","name": "previousOwner","type": "address"},{"indexed": true,"internalType": "address","name": "newOwner","type": "address"}],"name": "OwnershipTransferred","type": "event"},{"inputs": [],"name": "renounceOwnership","outputs": [],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "uint256","name": "gm","type": "uint256"}],"name": "setGasMargin","outputs": [],"stateMutability": "nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": "newOwner","type": "address"}],"name": "transferOwnership","outputs": [],"stateMutability": "nonpayable","type": "function"},{"inputs": [],"name": "owner","outputs": [{"internalType": "address","name": "","type": "address"}],"stateMutability": "view","type": "function"}]'
-const maxReadsPerTx = process.env.MAX_READS_PER_TX
+const maxReadsPerTx = config.stateVariablesReader.maxReadsPerTx
 let WETHPrice, minPoolWETH
 let aggregatorContract = [] 
 let flaggerContract = [] 
@@ -52,7 +53,7 @@ async function main(){
     else 
       console.log("All variables are up to date. Return")
     console.log("loop done")
-    let toWait = process.env.STATE_VARS_RUN_INTERVAL_HOURS * 60 * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
+    let toWait = config.stateVariablesReader.runInterval_minutes * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
     if(toWait > 0){
       await Utils.sleep(toWait)
     }
@@ -62,7 +63,7 @@ async function main(){
 async function getWETHPrice(){
   let ERC20PricesCached = JSON.parse(await mysql.getFromCache(dbConn,"ERC20_" + chain, true))
   WETHPrice = ERC20PricesCached[0].USD_price
-  minPoolWETH = new BigNumber(process.env.FLAGGER_CONTRACT_MIN_POOL_USD).times(new BigNumber(10).exponentiatedBy(ERC20PricesCached[0].decimals)).div(WETHPrice).toFixed(0) // only used for UniV2 pools
+  minPoolWETH = new BigNumber(config.analysisFlag.minPool_usd).times(new BigNumber(10).exponentiatedBy(ERC20PricesCached[0].decimals)).div(WETHPrice).toFixed(0) // only used for UniV2 pools
 }
 
 function bootstrapWeb3(){

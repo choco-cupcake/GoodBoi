@@ -1,4 +1,5 @@
 const Database = require('./DB')
+const config = require('../data/config')
 const Utils = require('./Utils')
 const Crypto = require('crypto')
 const Web3 = require("web3")
@@ -98,7 +99,7 @@ async function getContractHavingAddressInVars(conn, address, chain){
 async function getFlaggedContractsToReflect(conn){
   let query = "SELECT ID, address, chain, poolFlag, balanceFlag FROM contract WHERE (poolFlag=1 OR balanceFlag=1) AND DATE_SUB(NOW(), INTERVAL ? DAY) > reflUpdatedAt"
   try{
-    let [data, fields] = await conn.query(query, process.env.REFLECT_DAYS_REPEAT)
+    let [data, fields] = await conn.query(query, config.analysisFlag.reflectedFlag.refreshReflect_days)
     return data
   }
   catch(e){
@@ -166,9 +167,9 @@ async function updateProxyImplAddress(conn, chain, cID, implAddress, isChanged){
 }
 
 async function getBatchProxiesToRead(conn, chain){
-  const batchLen = process.env.PROXIES_BATCH_LEN
-  const daysRefresh = process.env.PROXIES_REFRESH_DAYS
-  const waitDays = process.env.PROXIES_WAIT_DAYS
+  const batchLen = config.proxyReader.batchLength
+  const daysRefresh = config.proxyReader.refresh_days
+  const waitDays = config.proxyReader.wait_days
   let query = "SELECT ID, address, implAddress FROM `contract` WHERE `chain`=? AND (contractName LIKE '%proxy%' OR proxy = 1) AND contractName != 'GnosisSafeProxy' AND DATE_SUB(NOW(), INTERVAL ? DAY) > dateFound AND (DATE_SUB(NOW(), INTERVAL ? DAY) > implCheckedAt OR implCheckedAt IS NULL) LIMIT ?;"
   try{
     let [data, fields] = await conn.query(query, [chain, waitDays, daysRefresh, Number(batchLen)])
@@ -211,9 +212,9 @@ async function updateAddressVars(conn, cID, isFlagged, addrVars, areChanged, add
 }
 
 async function getBatchVarsToRead(conn, chain){
-  const batchLen = process.env.STATE_VARS_BATCH_LEN
-  const daysRefresh = process.env.STATE_VARS_REFRESH_DAYS
-  const waitDays = process.env.STATE_VARS_WAIT_DAYS
+  const batchLen = config.stateVariablesReader.batchLength
+  const daysRefresh = config.stateVariablesReader.refreshInterval_days
+  const waitDays = config.stateVariablesReader.waitDays
   let query = `SELECT c1.ID, c1.address, c1.addressVars, c1.implAddress, c2.addressVars AS "implVars" FROM contract AS c1 
   LEFT JOIN contract AS c2 ON c1.chain=c2.chain AND c1.implAddress = c2.address
   WHERE c1.chain = ? AND c1.contractName != 'UniswapV2Pair' AND c1.contractName != 'UniswapV3Pool' AND c1.contractName != 'GnosisSafeProxy' 
@@ -393,10 +394,10 @@ async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20H
       Utils.printQueryError(query, [ERC20Holdings, totalUSDValue, eth_balance, contractAddress, chain], "Error updating balance - row not found")
       return false
     }
-    if(Number(totalUSDValue) > process.env.FLAGGER_MIN_BALANCE && !isBalanceFlagged){
+    if(Number(totalUSDValue) > config.analysisFlag.minBalance_usd && !isBalanceFlagged){
       await flagContractBalance(conn, chain, contractAddress, implAddress)
     }
-    else if(Number(totalUSDValue) < process.env.FLAGGER_MIN_BALANCE && isBalanceFlagged){
+    else if(Number(totalUSDValue) < config.analysisFlag.minBalance_usd && isBalanceFlagged){
       await flagContractBalance(conn, chain, contractAddress, implAddress, true)
     }
     return true
@@ -435,7 +436,7 @@ async function flagContractBalance(conn, chain, contractAddress, implAddress, re
 async function checkPruneContract(conn, chain, contractAddress, totalUSDValue, isLastTxOld, isFlagged){
   if(!isLastTxOld || isFlagged)
     return false
-  if(process.env.CONTRACT_PRUNER_ENABLED && Number(totalUSDValue) < Number(process.env.CONTRACT_PRUNER_MIN_BALANCE)){
+  if(config.balanceGetter.contractPruner.enabled && Number(totalUSDValue) < Number(config.balanceGetter.contractPruner.minBalance_usd)){
     // check if to prune
     let query = "SELECT ID FROM contract WHERE chain=? AND (poolFlag=1 OR balanceFlag=1 OR reflPoolFlag=1 OR reflBalanceFlag=1) AND implAddress=?"; 
     try{
@@ -615,7 +616,7 @@ async function getContractByID(conn, ID){
 }
 
 async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
-  let pruneDays = process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS
+  let pruneDays = config.balanceGetter.contractPruner.inactivity_days
   let query = "SELECT b.ID, b.address, c.implAddress, c.balanceFlag, ((c.lastTx + INTERVAL ? day) <= NOW()) AS isLastTxOld, (c.poolFlag OR c.balanceFlag OR c.reflPoolFlag OR c.reflBalanceFlag) AS isFlagged FROM balances AS b, contract AS c WHERE b.`chain`=? AND b.lastUpdate < NOW() - INTERVAL ? DAY AND c.address=b.address AND c.`chain`=b.`chain` ORDER BY c.lastTx ASC LIMIT ? "
   try{
     let [data, fields] = await conn.query(query, [pruneDays, chain, daysOld, +batchSize]);
@@ -830,6 +831,23 @@ async function markAsUnverified(conn, chain, address){
   }
   catch(e){
     Utils.printQueryError(query, address, "Error marking address as unverified " + e.message)
+    return false
+  }
+}
+
+async function markAsIgnored(conn, chain, address){
+  let parsedTable = 'parsedaddress_' + chain.toLowerCase()
+  let query = "UPDATE " + parsedTable + " SET verified = 1, ignored=1 WHERE address = ?"
+  try{
+    let [data, fields] = await conn.query(query, address);
+    if(!data.affectedRows){ 
+      Utils.printQueryError(query, address, "Error marking address as ignored")
+    }
+    await deleteAddressFromPool(conn, chain, address)
+    return true
+  }
+  catch(e){
+    Utils.printQueryError(query, address, "Error marking address as ignored " + e.message)
     return false
   }
 }
@@ -1147,10 +1165,10 @@ async function performInsertQuery(conn, query, params, suppressError = false, is
 
 async function getFromParsedPool(conn, chain, address){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
-  let toRefreshSubQuery = (process.env.UNVERIFIED_RECHECK_ENABLED == 1) ? 
+  let toRefreshSubQuery = (config.blockParser.unverifiedRecheck_enabled == 1) ? 
     "(verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() )" : "'0'"
   let query = "SELECT *, " + toRefreshSubQuery + " as toRefresh, verified FROM " + parsedTable + " WHERE address = ?"
-  let queryParams = (process.env.UNVERIFIED_RECHECK_ENABLED == 1) ? [process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS, address] : [address]
+  let queryParams = (config.blockParser.unverifiedRecheck_enabled == 1) ? [config.blockParser.verifiedRecheck_days, address] : [address]
   try{
     let [data, fields] = await conn.query(query, queryParams);
     return data
@@ -1163,12 +1181,12 @@ async function getFromParsedPool(conn, chain, address){
 
 async function getFromParsedPoolBatch(conn, chain, address){
   let parsedTable = 'parsedaddress_' + chain.toLowerCase()
-  let addressBatch = '("' + address.map(e => e.toLowerCase()).join('","') + '")'
+  let addressBatch = '("' + address.map(e => Web3.utils.toChecksumAddress(e)).join('","') + '")'
   let recheckCondition = "(verified = 0 AND (lastCheck + INTERVAL ? day) <= NOW() )"
 
-  let query = "SELECT address, verified, "+recheckCondition+" AS toRecheck FROM " + parsedTable + " WHERE LOWER(address) IN " + addressBatch 
+  let query = "SELECT address, verified, "+recheckCondition+" AS toRecheck FROM " + parsedTable + " WHERE address IN " + addressBatch 
 
-  let queryParams = (process.env.UNVERIFIED_RECHECK_ENABLED == 1) ? process.env.BLOCK_PARSER_VERIFIED_RECHECK_DAYS : null
+  let queryParams = (config.blockParser.unverifiedRecheck_enabled == 1) ? config.blockParser.verifiedRecheck_days : null
   try{
     let [data, fields] = await conn.query(query, queryParams);
     return data
@@ -1183,4 +1201,4 @@ async function getDBConnection(){
   return await Database.getDBConnection()
 }
 
-module.exports = {updateLastTxBatch, getContractByID, deleteContract, deleteAnalysis, deleteContractSourcefile, deleteSourcefile, getCountContractSourcefilesFromSourcefile, getContractSourcefilesFromContract, pushAddressToPoolTable, pruneContract, updateSourcefileSignature, getSourcefileIDs, getContractsNullSignature, spotAnalysis, updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};
+module.exports = {markAsIgnored, updateLastTxBatch, getContractByID, deleteContract, deleteAnalysis, deleteContractSourcefile, deleteSourcefile, getCountContractSourcefilesFromSourcefile, getContractSourcefilesFromContract, pushAddressToPoolTable, pruneContract, updateSourcefileSignature, getSourcefileIDs, getContractsNullSignature, spotAnalysis, updateLastSolcCommit, getLastSolcCommit, updateFlagReflectionDate, flagReflection, getContractHavingAddressInVars, getFlaggedContractsToReflect, pushAddressesToPoolBatch, getFromCache, updateCache, updateProxyImplAddress, getBatchProxiesToRead, updateAddressVars, getBatchVarsToRead, getContractFiles, keepAlive, addSlitherAnalysisColumns, getSlitherAnalysisColumns, updateLastParsedBlockDownward, getLastParsedBlockDownward, getLastBackupDB, updateLastBackupDB, updateLastParsedBlock, getLastParsedBlock, insertToContractSourcefile, getHashFromDB, performInsertQuery, markAsUnverified, updateBalance, getAddressesOldBalance, pushSourceFiles, markContractAsErrorAnalysis, getDBConnection, pushAddressesToPool, deleteAddressFromPool, getAddressBatchFromPool, insertFindingsToDB, markContractAsAnalyzed, getBatchToAnalyze};

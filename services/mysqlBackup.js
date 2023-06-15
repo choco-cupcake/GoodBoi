@@ -1,20 +1,21 @@
 require("dotenv").config()
 const fs = require("fs")
-const AWS = require('aws-sdk')
 const mysqldump = require('mysqldump')
-const Utils = require('../utils/Utils')
+const config = require('../data/config')
 const S3Helper = require("../utils/S3Helper.js")
 const mysql = require('../utils/MysqlGateway')
 
-const backupTime =  process.env.MYSQL_BACKUP_HOURS
-const bucketName = process.env.AWS_BUCKET_NAME
+const backupTime =  config.mysqlBackup.backupHours
+const bucketName = config.mysqlBackup.AWSBucketName
+const runInterval = config.mysqlBackup.runInterval_minutes
+
 let dbConn
 
 main() 
 
 async function main(){
   await backupDB()
-  setTimeout(main, 30 * 60 * 1000) // 30 min
+  setTimeout(main, runInterval * 60 * 1000) // 30 min
 }
 
 async function backupDB(){

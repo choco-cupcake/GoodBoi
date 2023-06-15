@@ -1,9 +1,10 @@
 const mysql = require('../utils/MysqlGateway');
+const config = require('../data/config')
 const Utils = require('../utils/Utils');
 const Web3 = require("web3")
 const { program } = require('commander');
 const implSlotAddress = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
-const batchLen = process.env.PROXIES_BATCH_LEN
+const batchLen = config.proxyReader.batchLength
 let web3Index = 0, web3 = [], web3IndexLastLoop = 0
 let doneCount = 0, readCount = 0
 
@@ -39,7 +40,7 @@ async function main(){
     else 
       console.log("All proxies are up to date. Return")
     console.log("loop done")
-    let toWait = process.env.STATE_VARS_RUN_INTERVAL_HOURS * 60 * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
+    let toWait = config.stateVariablesReader.runInterval_minutes * 60 * 1000 - (Date.now() - start) // 1 hour - elapsed
     if(toWait > 0){
       await Utils.sleep(toWait)
     }

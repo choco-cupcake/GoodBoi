@@ -1,4 +1,5 @@
 require("dotenv").config()
+const config = require('../data/config')
 const { program } = require('commander');
 const axios = require("axios")
 const mysql = require('../utils/MysqlGateway');
@@ -20,7 +21,7 @@ const scannerEndpoints = require("../data/scanners_API_endpoints")
 const apiEndpoint = scannerEndpoints.endpoints[chain]
 const scannerApiKey = scannerEndpoints.apikeys[chain]
 const axiosConfig = scannerEndpoints.axiosConfig[chain]
-const ignoredContracts = ["GnosisSafeProxy","CollectNFT","Holographer","ChannelImplementation","TransparentUpgradeableProxy"] // a lot of instances, not interesting
+const ignoredContracts = config.sourceGetter.ignoredContracts
 
 let addressBuffer = []
 let mysqlConn
@@ -36,7 +37,7 @@ async function main(){
 		console.log("loop started")
 		let start = Date.now()
 		await getAllSources(chain)
-		let toWait = process.env.SOURCE_GETTER_RUN_INTERVAL_MINUTES * 60 * 1000 - (Date.now() - start) // 20min - elapsed
+		let toWait = config.sourceGetter.runIntervalMinutes * 60 * 1000 - (Date.now() - start) // 20min - elapsed
 		console.log("loop done")
 		if(toWait > 0){
 			await Utils.sleep(toWait)
@@ -101,6 +102,7 @@ async function crawlSourceCode(chain, address){
 		return
 	}
 	if(ignoredContracts.includes(contractInfo.ContractName)){
+		await mysql.markAsIgnored(mysqlConn, chain, address)
 		console.log("Ignored '" + contractInfo.ContractName + "' contract instance")
 		return
 	}

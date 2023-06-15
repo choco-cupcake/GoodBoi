@@ -1,4 +1,5 @@
 // this module will cover for edge case bugs, eg deadlocks on inserts
+const config = require('../data/config')
 const mysql = require('../utils/MysqlGateway');
 const Crypto = require('crypto')
 const Utils = require('../utils/Utils')
@@ -18,7 +19,7 @@ async function main(){
     await checkAnalysisRecords()
     await checkBalanceRecords()
 
-    let toWait = process.env.CONSISTENCY_CHECKER_INTERVAL * 60 * 60 * 1000 - (Date.now() - start)
+    let toWait = config.consistencyChecker.runInterval_minutes * 60 * 1000 - (Date.now() - start)
     if(toWait > 0){
       await Utils.sleep(toWait)
     }

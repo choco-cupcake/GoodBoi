@@ -1,4 +1,5 @@
 require("dotenv").config()
+const config = require('../data/config')
 const Web3 = require("web3")
 const Utils = require('../utils/Utils')
 const { program } = require('commander');
@@ -40,7 +41,7 @@ async function main(){
     let start = Date.now()
     await parseBlocks()
     console.log("loop done")
-    let toWait = process.env.BLOCK_PARSER_RUN_INTERVAL_MINUTES * 60 * 1000 - (Date.now() - start) // 1 min - elapsed
+    let toWait = config.blockParser.runInterval_minutes * 60 * 1000 - (Date.now() - start) // 1 min - elapsed
     if(toWait > 0){
       await Utils.sleep(toWait)
     }
@@ -102,7 +103,7 @@ async function parseBlock(blockIndex, currentBlock){
     toAddresses = [...new Set(toAddresses)] // remove doubles
     for(let toAddr of toAddresses){
       toAddressBuffer.push(toAddr)
-      if(toAddressBuffer.length >= process.env.IS_CONTRACT_BATCH_LEN || (blockIndex == currentBlock)){
+      if(toAddressBuffer.length >= config.blockParser.isContractBatchLength || (blockIndex == currentBlock)){
         let areContracts = await (await getAggregatorContractRoundRobin()).methods.areContracts(toAddressBuffer).call()
         let toContracts = toAddressBuffer.filter((e,index) => areContracts[index])
         let toUpdateLastTx = await mysql.pushAddressesToPoolBatch(dbConn, chain, toContracts)

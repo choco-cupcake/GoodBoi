@@ -379,8 +379,8 @@ async function getHashFromDB(conn, h){
   }
 }
 
-async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20Holdings, eth_balance, implAddress, isBalanceFlagged, isLastTxOld){
-  let pruned = await checkPruneContract(conn, chain, contractAddress, totalUSDValue, isLastTxOld)
+async function updateBalance(conn, chain, contractAddress, totalUSDValue, ERC20Holdings, eth_balance, implAddress, isBalanceFlagged, isLastTxOld, isFlagged){
+  let pruned = await checkPruneContract(conn, chain, contractAddress, totalUSDValue, isLastTxOld, isFlagged)
   if(pruned){
     console.log("pruned ", chain, " - ", contractAddress)
     return true
@@ -432,25 +432,24 @@ async function flagContractBalance(conn, chain, contractAddress, implAddress, re
   }
 }
 
-async function checkPruneContract(conn, chain, contractAddress, totalUSDValue, isLastTxOld){
-  if(!isLastTxOld)
+async function checkPruneContract(conn, chain, contractAddress, totalUSDValue, isLastTxOld, isFlagged){
+  if(!isLastTxOld || isFlagged)
     return false
   if(process.env.CONTRACT_PRUNER_ENABLED && Number(totalUSDValue) < Number(process.env.CONTRACT_PRUNER_MIN_BALANCE)){
     // check if to prune
-    let query = "SELECT (poolFlag=0 AND balanceFlag=0 AND reflPoolFlag=0 AND reflBalanceFlag=0) AND address NOT IN (SELECT implAddress FROM contract WHERE chain=? AND (poolFlag=1 OR balanceFlag=1 OR reflPoolFlag=1 OR reflBalanceFlag=1))) AS toPrune FROM contract WHERE address = ? AND `chain` = ?"; 
+    let query = "SELECT ID FROM contract WHERE chain=? AND (poolFlag=1 OR balanceFlag=1 OR reflPoolFlag=1 OR reflBalanceFlag=1) AND implAddress=?"; 
     try{
-      let [data, fields] = await conn.query(query, [chain, contractAddress, chain]); 
-      if(!data.length){
-        Utils.printQueryError(query, [contractAddress, chain], "Error checking contract pruning - row not found")
+      let [data, fields] = await conn.query(query, [chain, contractAddress]); 
+      if(data.length){
         return false
       }
-      if(data[0].toPrune){
+      else{
         await pruneContract(conn, chain, contractAddress)
         return true
       }
     }
     catch(e){
-      Utils.printQueryError(query, [contractAddress, chain], "Error checking contract pruning - " + e.message)
+      Utils.printQueryError(query, [chain, contractAddress, chain], "Error checking contract pruning - " + e.message)
       return false
     }
   }
@@ -584,7 +583,7 @@ async function deleteContractSourcefile(conn, contract_sourcefileID){
 }
 
 async function getContract(conn, chain, address){
-  let query = "SELECT ID, sourcefile_signature FROM contract WHERE `chain`=? AND address=?"
+  let query = "SELECT ID, sourcefile_signature, address, chain FROM contract WHERE `chain`=? AND address=?"
   try{
     let [data, fields] = await conn.query(query, [chain, address]);
     if(!data.length){
@@ -617,7 +616,7 @@ async function getContractByID(conn, ID){
 
 async function getAddressesOldBalance(conn, chain, daysOld, batchSize){
   let pruneDays = process.env.CONTRACT_PRUNER_UNACTIVITY_DAYS
-  let query = "SELECT b.ID, b.address, c.implAddress, c.balanceFlag, ((c.lastTx + INTERVAL ? day) <= NOW()) AS isLastTxOld FROM balances AS b, contract AS c WHERE b.`chain`=? AND b.lastUpdate < NOW() - INTERVAL ? DAY AND c.address=b.address AND c.`chain`=b.`chain` ORDER BY c.lastTx ASC LIMIT ? "
+  let query = "SELECT b.ID, b.address, c.implAddress, c.balanceFlag, ((c.lastTx + INTERVAL ? day) <= NOW()) AS isLastTxOld, (c.poolFlag OR c.balanceFlag OR c.reflPoolFlag OR c.reflBalanceFlag) AS isFlagged FROM balances AS b, contract AS c WHERE b.`chain`=? AND b.lastUpdate < NOW() - INTERVAL ? DAY AND c.address=b.address AND c.`chain`=b.`chain` ORDER BY c.lastTx ASC LIMIT ? "
   try{
     let [data, fields] = await conn.query(query, [pruneDays, chain, daysOld, +batchSize]);
     return data

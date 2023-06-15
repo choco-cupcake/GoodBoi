@@ -111,7 +111,7 @@ async function refreshBatch(){
           ERC20Holdings.holdings.push({token: ERC20_of_interest[i].token, amount: ERC20Holdings_raw[k].balances[i]})
       }
       let usdval = ERC20USDValue.toFixed(0)
-      await mysql.updateBalance(dbConn, chain, batch[k].address, usdval, JSON.stringify(ERC20Holdings), eth_balance, batch[k].implAddress, batch[k].balanceFlag, batch[k].isLastTxOld)
+      await mysql.updateBalance(dbConn, chain, batch[k].address, usdval, JSON.stringify(ERC20Holdings), eth_balance, batch[k].implAddress, batch[k].balanceFlag, batch[k].isLastTxOld, batch[k].isFlagged)
 
       addrCrawled++
       cumulativeUsd += +usdval

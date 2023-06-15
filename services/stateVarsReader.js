@@ -403,21 +403,21 @@ function callsToRawArray(callObj){
 }
 
 function pushToInternalAddresses(_varObj, internalAddresses){
-  for(let sav of _varObj.SAV.filter(e => {return Utils.isVarAllowed(e.name) && e.val && e.val.length && notAddresZero(e.val)})){
+  for(let sav of _varObj.SAV.filter(e => {return Utils.isVarAllowed(e.name) && e.val && e.val.length && notAddressZero(e.val)})){
     internalAddresses.push(sav.val)
   }
-  for(let sam of _varObj.SAM.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && notAddresZero(e.val)})){
+  for(let sam of _varObj.SAM.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && notAddressZero(e.val)})){
     for(let a of sam.val)
       internalAddresses.push(a)
   }
-  for(let saa of _varObj.SAA.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && notAddresZero(e.val)})){
+  for(let saa of _varObj.SAA.filter(e => {return Utils.isVarAllowed(e.name) && e.val.length && notAddressZero(e.val)})){
     for(let a of saa.val)
       internalAddresses.push(a)
   }
   
 }
 
-function notAddresZero(addr){
+function notAddressZero(addr){
   return addr != "0x0" && addr != "0x0000000000000000000000000000000000000000"
 }
 

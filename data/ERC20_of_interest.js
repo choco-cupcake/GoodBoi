@@ -281,7 +281,6 @@ const ERC20s_of_interest = {"ETH_MAINNET": [
     {"token":"STG","name":"StargateToken","address":"0x2f6f07cdcf3588944bf4c42ac74ff24bf56e7590","decimals":"18"},
     {"token":"LPT","name":"Livepeer Token","address":"0x3962f4a0a0051dcce0be73a7e09cef5756736712","decimals":"18"},
     {"token":"UMA","name":"UMA Voting Token v1","address":"0x3066818837c5e6ed6601bd5a91b0762877a6b731","decimals":"18"},
-    {"token":"SYN","name":"Synapse","address":"0xf8f9efc0db77d8881500bb06ff5d6abc3070e695","decimals":"18"},
     {"token":"TEL","name":"Telcoin","address":"0xdf7837de1f2fa4631d716cf2502f8b230f1dcc32","decimals":"2"},
     {"token":"RLC","name":"RLC","address":"0xbe662058e00849c3eef2ac9664f37fefdf2cdbfe","decimals":"9"},
     {"token":"KNC","name":"Kyber Network Crystal v2","address":"0x1c954e8fe737f99f68fa1ccda3e51ebdb291948c","decimals":"18"},
